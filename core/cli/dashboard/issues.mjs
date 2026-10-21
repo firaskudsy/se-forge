@@ -185,7 +185,8 @@ export function issueLinks({ issues = [], remote = '', tracker = 'gitlab' }) {
   const known = new Map(issues.filter((i) => i.url).map((i) => [Number(i.id), i.url]));
   const m = /^(?:\w+:\/\/)?(?:[^@/]+@)?([^/:]+)(?::\d+)?[:/](.+?)(?:\.git)?\/?$/.exec(String(remote).trim());
   const base = m && !/^\//.test(m[2]) ? `https://${m[1]}/${m[2]}` : null;
-  return (num) => known.get(Number(num)) ?? (base ? `${base}${tracker === 'github' ? '' : '/-'}/issues/${num}` : null);
+  // OpenProject's work packages are not under the repository's remote: only the address it gave is known.
+  return (num) => known.get(Number(num)) ?? (base && tracker !== 'openproject' ? `${base}${tracker === 'github' ? '' : '/-'}/issues/${num}` : null);
 }
 
 // "3 open, 0 in progress, 0 in testing, 22 closed", top band first.

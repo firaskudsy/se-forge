@@ -6,14 +6,15 @@ set -uo pipefail
 
 help() {
   cat <<'HELP'
-forge tracker: read and change tickets on the project's tracker (GitHub or GitLab).
+forge tracker: read and change tickets on the project's tracker (GitHub, GitLab or OpenProject).
 
 Read:
   get <id> [--json]                       title, state, labels, assignee and description of one ticket
   list board [<board>]                    each status with its open tickets
   list status "<status>"                  the tickets in one status, open or closed
   list open                               the open tickets
-  list ready                              the open tickets the leader may take (label ai::ready or ai:ready)
+  list ready                              the open tickets the leader may take (label ai::ready or ai:ready;
+                                          on OpenProject, the status OPENPROJECT_READY_STATUS)
   list json                               the open tickets with their dates, for triage
   statuses                                how this tracker spells its statuses and types
 
@@ -33,12 +34,12 @@ HELP
 case "${1:-help}" in help|-h|--help) help; exit 0 ;; esac
 
 if [[ ! "${FORGE_TRACKER:-}" =~ ^[a-z]+$ ]]; then
-  echo "tracker: FORGE_TRACKER is '${FORGE_TRACKER:-}'; run this as forge tracker <command>, with project.tracker set to github or gitlab" >&2
+  echo "tracker: FORGE_TRACKER is '${FORGE_TRACKER:-}'; run this as forge tracker <command>, with project.tracker set to github, gitlab or openproject" >&2
   exit 2
 fi
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ ! -f "$here/adapters/$FORGE_TRACKER.sh" ]]; then
-  echo "tracker: no adapter for '$FORGE_TRACKER' in $here/adapters; set project.tracker (or FORGE_TRACKER) to github or gitlab" >&2
+  echo "tracker: no adapter for '$FORGE_TRACKER' in $here/adapters; set project.tracker (or FORGE_TRACKER) to github, gitlab or openproject" >&2
   exit 2
 fi
 # shellcheck source=lib.sh

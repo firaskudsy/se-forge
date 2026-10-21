@@ -83,6 +83,10 @@ export const PROJECT_DEFAULTS = Object.freeze({
   tracker: 'gitlab',
   // A system's one board (decision 131): the GitLab or GitHub project ("group/board") every ticket lives in.
   board: '',
+  // project.tracker "openproject": its non-secret settings (the API key never goes here; see openprojectEnv).
+  // boards maps a name to a basic board's id (/projects/<identifier>/boards/<id>); board is the shorthand for a
+  // single board; defaultBoard (a name or an id) is the board used without --board, else board, else the first.
+  openproject: { url: '', project: '', board: '', boards: {}, defaultBoard: '', readyStatus: '' },
   stack: { frontend: '', mobile: '', backend: '', database: '', cloud: '', other: '' },
   storiesPath: '',
   // toolPrefix: Figma's Claude Code plugin (claude plugin install figma) registers its server as plugin:figma:figma.
@@ -111,6 +115,9 @@ export const PROJECT_DEFAULTS = Object.freeze({
 // Code accepts (decision 93). Claude Code compacts well before the window's end, keeping room for its reply
 // (at about 66k of a 100k window, measured), so the window sits 100k past the handover line: the lead is
 // warned first and has room to bring its handover up to date.
+// The trackers core/tracker/adapters/ has an adapter for (project.tracker, forge init --tracker).
+export const TRACKERS = Object.freeze(['gitlab', 'github', 'openproject']);
+
 export const leadCompactAt = (budget) => Math.min(1000000, Math.max(100000, budget.leadWarn + 100000));
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -120,6 +127,53 @@ const SIDE_LISTS = new Set(['tests.sides']);
 const PRICE_KEYS = ['input', 'cacheWrite5m', 'cacheWrite1h', 'cacheRead', 'output'];
 const isPrice = (x) => isObj(x) && Object.keys(x).length === PRICE_KEYS.length && PRICE_KEYS.every((k) => typeof x[k] === 'number' && x[k] >= 0);
 
+const BOARD_ID = /^[1-9]\d*$/;
+const isBoardId = (x) => (Number.isInteger(x) && x > 0) || (typeof x === 'string' && BOARD_ID.test(x));
+// project.openproject: strings for url, project, readyStatus; board ids as numbers or digit strings (kept as strings).
+function checkOpenproject(v, base, where, errors) {
+  const out = { ...base, boards: {} };
+  for (const [k, x] of Object.entries(v)) {
+    if (k.startsWith('$')) continue;
+    if (!(k in base)) errors.push(`unknown key ${where}.${k}`);
+    else if (k === 'board') { if (x === '' || isBoardId(x)) out.board = String(x); else errors.push(`${where}.board must be a board id (the number in /boards/<id>)`); }
+    else if (k === 'defaultBoard') { if (x === '' || isBoardId(x) || typeof x === 'string') out.defaultBoard = String(x); else errors.push(`${where}.defaultBoard must be a board name from ${where}.boards or a board id`); }
+    else if (k === 'boards') {
+      if (!isObj(x) || Object.entries(x).some(([n, id]) => !/^[A-Za-z][\w.-]*$/.test(n) || n === 'all' || !isBoardId(id))) errors.push(`${where}.boards must map a name (letters, digits, _ . -; not "all") to a board id, e.g. { "issues": 109, "frontend": 110 }`);
+      else out.boards = Object.fromEntries(Object.entries(x).map(([n, id]) => [n, String(id)]));
+    } else if (typeof x !== 'string') errors.push(`${where}.${k} must be a string`);
+    else out[k] = x;
+  }
+  if (out.defaultBoard && !BOARD_ID.test(out.defaultBoard) && !(out.defaultBoard in out.boards)) errors.push(`${where}.defaultBoard "${out.defaultBoard}" is not a name in ${where}.boards`);
+  return out;
+}
+
+// The environment the OpenProject adapter reads, from project.openproject; a variable already set wins.
+export function openprojectEnv(project, env = process.env) {
+  const o = project.openproject ?? PROJECT_DEFAULTS.openproject;
+  const boards = o.boards ?? {};
+  const def = o.defaultBoard ? (boards[o.defaultBoard] ?? o.defaultBoard) : o.board || '';
+  const values = {
+    OPENPROJECT_URL: o.url,
+    OPENPROJECT_PROJECT: o.project,
+    OPENPROJECT_BOARDS: Object.entries(boards).map(([n, id]) => `${n}=${id}`).join(','),
+    OPENPROJECT_BOARD: def,
+    OPENPROJECT_READY_STATUS: o.readyStatus,
+  };
+  return Object.fromEntries(Object.entries(values).filter(([k, x]) => x && !env[k]));
+}
+
+// The extra environment `forge tracker` (and forge merge) runs the adapter with.
+export function trackerEnv(project, env = process.env) {
+  const tracker = env.FORGE_TRACKER || project.tracker;
+  // A system's one board (decision 131): every repository's tickets go to it.
+  const repoVar = { github: 'GH_REPO', gitlab: 'GITLAB_REPO' }[project.tracker];
+  return {
+    FORGE_TRACKER: tracker,
+    ...(project.board && repoVar ? { [repoVar]: project.board } : {}),
+    ...(tracker === 'openproject' ? openprojectEnv(project, env) : {}),
+  };
+}
+
 function merge(base, over, at, errors) {
   if (!isObj(over)) return base;
   const out = { ...base };
@@ -128,7 +182,10 @@ function merge(base, over, at, errors) {
     if (k.startsWith('$')) continue;
     if (!(k in base)) { errors.push(`unknown key ${where}`); continue; }
     const b = base[k];
-    if (where === 'project.prices') {
+    if (where === 'project.openproject') {
+      if (!isObj(v)) { errors.push(`${where} must be an object`); continue; }
+      out[k] = checkOpenproject(v, b, where, errors);
+    } else if (where === 'project.prices') {
       if (!isObj(v) || Object.entries(v).some(([m, x]) => !/^[\w.:[\]-]+$/.test(m) || !isPrice(x))) errors.push(`${where} must map a model to { "input": n, "cacheWrite5m": n, "cacheWrite1h": n, "cacheRead": n, "output": n } in dollars per million tokens`);
       else out[k] = v;
     } else if (isObj(b)) {
@@ -191,6 +248,7 @@ export function loadConfig(mainRoot, env = process.env) {
   for (const k of ['lanes', 'blockerRounds', 'qaFails']) if (!Number.isInteger(config.limits?.[k]) || config.limits[k] < 1) errors.push(`policy.limits.${k} must be a whole number, 1 or more`);
   if (!['auto', 'gitleaks', 'builtin'].includes(config.secrets.scanner)) errors.push('policy.secrets.scanner must be auto, gitleaks or builtin');
   if (!['github', 'gitlab'].includes(project.host)) errors.push('project.host must be github or gitlab');
+  if (project.tracker && !TRACKERS.includes(project.tracker)) errors.push(`project.tracker must be ${TRACKERS.join(', ')}`);
   if (!['light', 'full'].includes(project.mode)) errors.push('project.mode must be light or full');
   if (!['', 'kit', 'figma', 'pdf', 'images'].includes(project.design.source)) errors.push('project.design.source must be kit, figma, pdf or images');
   for (const [tier, model] of Object.entries(project.models)) if (!/^[\w.:[\]-]+$/.test(model)) errors.push(`project.models.${tier} must be a model name (e.g. sonnet, opus, claude-opus-5-5)`);

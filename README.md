@@ -173,7 +173,7 @@ Details: `core/policy/README.md`.
 | Web | React with Vite, a generated API client, TanStack Query, shadcn/ui and Tailwind, i18next with Arabic RTL |
 | Mobile | Flutter 3.47 (Riverpod, go_router, gen-l10n with Arabic RTL), Android builds in CI |
 | Delivery | Docker Compose for the local stack, GitLab CI or GitHub Actions (secret scan, gates, image build) |
-| Tracker | GitLab issues or GitHub issues |
+| Tracker | GitLab issues, GitHub issues or OpenProject work packages (settings in `project.openproject`, the API key in the OS keychain: GUIDE.md, G) |
 
 `forge new` writes a working skeleton for any supported pair that passes its gate on day one.
 
@@ -235,7 +235,7 @@ In a terminal (`forge help` for every option; one page for the team: [docs/cheat
 | `forge doctor` | Health check; every ✗ or ! line says what to do |
 | `forge save` | Send plans, reviews and reports to the team repository |
 | `forge gates`, `forge merge <ticket>` | The "done" check on a branch; the lead's merge into `dev` once gates and reviews pass |
-| `forge tracker …` | The project's GitLab or GitHub issues: list, get, create, move, comment |
+| `forge tracker …` | The project's GitLab or GitHub issues, or OpenProject work packages: list, get, create, move, comment |
 | `forge api check \| fetch \| generate` | Lint the contract and catch breaking changes; the pinned spec; the generated client |
 | `forge new …` | A starter skeleton for the approved stack |
 | `forge app [up \| down]` | Build, start and open the app on this Mac from its Compose file |
@@ -326,7 +326,7 @@ core/                 the kit, tool-neutral
   policy/             the safety engine (Node 22+, no dependencies); see core/policy/README.md
   cli/                the forge command (dashboard/: forge dashboard)
   githooks/           pre-commit and commit-msg checks
-  tracker/            the tracker front door and its GitLab and GitHub adapters
+  tracker/            the tracker front door and its GitLab, GitHub and OpenProject adapters
   starter/            the skeletons forge new writes
   ci/  server/        CI jobs, and server setup checklists for GitHub and GitLab
 adapters/claude/      Claude Code wiring: roles -> agents, commands, the local settings template

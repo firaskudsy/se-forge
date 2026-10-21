@@ -1,12 +1,13 @@
 # se-forge: the guide
 
-From zero to an app built from client requirements, or to changes in a system that already exists. Six parts:
+From zero to an app built from client requirements, or to changes in a system that already exists. Seven parts:
 - **A.** Set up GitLab, once for the company.
 - **B.** Set up each MacBook, once per person.
 - **C.** Start a new app from client requirements.
 - **D.** Day to day.
 - **E.** Measure and improve: where the time and the money go.
 - **F.** An existing system of several repositories (system mode, first phase).
+- **G.** Configuration: a project whose tickets live in OpenProject.
 
 The examples use **https://gitlab.example.com** for your GitLab server: replace it with your server's address,
 and `<group>` with your GitLab group's name, for example `ai`, everywhere. To be sure, open any project in GitLab
@@ -237,6 +238,9 @@ succeed".
    glab auth login --hostname gitlab.example.com
    ```
    Paste the token when it asks, and choose **SSH** as the git protocol. `glab auth status` should show ✓.
+
+   **A project whose tickets live in OpenProject** (`project.tracker` is `"openproject"`) needs no `glab` for
+   its tickets, but an OpenProject API key on each Mac: see **G. Configuration: an OpenProject tracker**.
 6. **Get the team repo:**
    ```
    mkdir -p ~/code && cd ~/code
@@ -584,6 +588,94 @@ branch merges into a branch that deploys (`develop` to the test server above), `
 PERSON**: you merge the merge request in GitLab, and the lead moves the ticket to Done. To let the lead merge there
 too, add `"merge": "lead"` to that `deploys` entry. `forge dashboard` in `~/code/acme` covers every repository,
 with a Repo column and filter in the Tickets tab.
+
+---
+
+## G. Configuration: an OpenProject tracker
+
+A project whose tickets are OpenProject work packages runs every `forge tracker` command against OpenProject's
+REST API v3, with `curl` and `jq` (`brew install curl jq`, `apt install curl jq`). It needs the project's settings
+in the team repo and an API key on each machine.
+
+**1. The project's settings** go in the team repo's `<project>/project.json`, under `"project"`. None of them is a
+secret, so they are shared with the whole team:
+```json
+{
+  "project": {
+    "tracker": "openproject",
+    "openproject": {
+      "url": "https://openproject.example.com",
+      "project": "ird",
+      "boards": { "issues": 109, "frontend": 110 },
+      "defaultBoard": "issues",
+      "readyStatus": "Ready for Development"
+    }
+  }
+}
+```
+- `tracker`: `"openproject"` (or `forge init --project <slug> --new --tracker openproject`).
+- `url`: the server's address, with or without a trailing slash.
+- `project`: the **project identifier**, the part after `/projects/` in the project's address
+  (`https://openproject.example.com/projects/<identifier>/…`). Its numeric id or the pasted address also work.
+- `boards`: a name for each basic board the team uses, and its **board id**: open the board in OpenProject; its
+  address ends in `/projects/<identifier>/boards/<id>`. Names are letters, digits, `_`, `.` and `-` (not `all`).
+  For a single board, `"board": 109` is the shorthand.
+- `defaultBoard`: the board, by name or id, used when a command names none. Without it, `board`, else the first board.
+- `readyStatus`: the status `forge tracker ready` moves a ticket to and `forge tracker list ready` reads (default `Todo`).
+
+`forge config check <file>` validates the block before it is applied; a bad value is refused with its reason.
+
+**2. The API key**, never in `project.json` or any repository. In OpenProject: your avatar → **My account** →
+**Access tokens** → **API** → generate one and copy it (it is shown once). Store it once per machine, in one of:
+- **macOS (Keychain):**
+  ```
+  security add-generic-password -U -s se-forge-openproject -a "$USER" -T /usr/bin/security -w
+  ```
+  It asks for the key twice; paste it. `-U` replaces a key stored before.
+- **Linux (Secret Service, GNOME Keyring or KWallet):**
+  ```
+  secret-tool store --label="se-forge OpenProject" service se-forge-openproject
+  ```
+- **Windows (Git Bash), or any machine:** a file readable by you only,
+  `${XDG_CONFIG_HOME:-~/.config}/se-forge/openproject-key` (on Windows `%USERPROFILE%\.config\se-forge\openproject-key`):
+  ```
+  mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/se-forge"
+  pbpaste > "${XDG_CONFIG_HOME:-$HOME/.config}/se-forge/openproject-key"   # or paste it in an editor
+  chmod 600 "${XDG_CONFIG_HOME:-$HOME/.config}/se-forge/openproject-key"
+  ```
+  A file others can read is refused (except on Windows, where file modes mean nothing).
+
+The adapter looks in this order and takes the first key it finds: the `OPENPROJECT_API_KEY` environment variable,
+the macOS Keychain, the Linux keyring, the file. The key reaches `curl` on a file descriptor, never in a command's
+arguments or in any output. `forge doctor` says which of the four holds it (by name, never the key).
+
+**3. Overrides.** A variable already set in the environment wins over `project.json`, for one command or one
+machine: `OPENPROJECT_URL`, `OPENPROJECT_PROJECT`, `OPENPROJECT_BOARDS` (`"issues=109,frontend=110"`),
+`OPENPROJECT_BOARD` (the default board's id), `OPENPROJECT_READY_STATUS` and `OPENPROJECT_API_KEY`. For example
+`OPENPROJECT_URL=https://staging-op.example.com forge tracker statuses`.
+
+Check it all with `forge doctor` (the key's source, the boards) and `forge tracker statuses` (the project's
+statuses and work package types).
+
+**Multiple boards.** `forge tracker list board` shows the default board's columns; `list board frontend` (a name or
+an id) another one; `list board all` every configured board, each under `### <name> (<id>)`. A board OpenProject
+does not have, or the key cannot see, is named in one line and skipped. `forge tracker status <id> <status>` changes
+the status, then moves the card on **every** configured board it sits on. `create --board <name> --column <column>`
+puts the new card on that board.
+
+**No boards.** Without `boards` or `board` the tracker runs in status mode: `list board` groups the open work
+packages by status, `status` changes only the status (no card moves), and `create --column` sets the status of that
+name when one exists. `forge doctor` reports "no boards configured, status mode" as information, not a problem.
+
+**Status → column.** On a basic board the columns are hand-ordered lists, not statuses. After a status change the
+card goes to the column named like the new status, when the board has one. Otherwise the default mapping applies:
+In Development and Code review → In Process; In Testing, Ready for QA and In QA → In Testing; Ready for Release →
+To Be Deployed; Done, Closed and Resolved → Complete; Rejected → Canceled; On hold, Blocked and Pending → Pending.
+Todo and Ready for Development leave the card where it is.
+
+**What OpenProject lacks.** It has no labels: `--source`, `--area` and `--repo` go into a `Labels:` line at the end
+of the description. Cards are moved on basic boards only. `ready` is a status
+(`readyStatus`), not a label.
 
 ---
 

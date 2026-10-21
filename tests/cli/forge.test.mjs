@@ -431,6 +431,57 @@ test('doctor reports the API contract', () => {
   assert.match(w.forge(['doctor']).out, /! API contract from git@example\.com:acme\/backend\.git, but no version is pinned/);
 });
 
+test('tracker openproject: project.openproject reaches the adapter, a variable already set wins, doctor names the key source', () => {
+  const w = world();
+  w.ready();
+  for (const k of Object.keys(w.env)) if (k.startsWith('OPENPROJECT_')) delete w.env[k];
+  // A fake curl that answers a one-column board and logs the address it was asked; a fake Keychain with a key.
+  const bin = path.join(w.base, 'bin');
+  fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(bin, 'curl'), String.raw`#!/usr/bin/env node
+const a = process.argv.slice(2);
+if (a[0] === '--version') { console.log('curl 8 (fake)'); process.exit(0); }
+const url = new URL(a[a.length - 1]);
+require('fs').appendFileSync(process.env.FAKE_LOG, url.origin + url.pathname + '\n');
+const p = url.pathname.replace(/^\/api\/v3/, '');
+const r = p === '/grids/109' ? { widgets: [{ startColumn: 1, options: { queryId: 11 } }] }
+  : p === '/queries/11' ? { name: 'Todo', _embedded: { results: { _embedded: { elements: [{ id: 42, subject: 'Login', _links: { status: { title: 'Todo' }, assignee: { title: 'Amal' } } }] } } } }
+  : null;
+process.stdout.write(JSON.stringify(r ?? { message: 'not found' }) + '\n' + (r ? 200 : 404));
+`, { mode: 0o755 });
+  fs.writeFileSync(path.join(bin, 'security'), '#!/bin/sh\nprintf "%s\\n" op-keychain-key\n', { mode: 0o755 });
+  const log = path.join(w.base, 'curl.log');
+  fs.writeFileSync(log, '');
+  Object.assign(w.env, { PATH: `${bin}:${process.env.PATH}`, FAKE_LOG: log, HOME: w.base });
+  const pj = path.join(w.team, 'acme-portal/project.json');
+  const cfg = JSON.parse(fs.readFileSync(pj, 'utf8'));
+  cfg.project.tracker = 'openproject';
+  cfg.project.openproject = { url: 'https://op.example.com', project: 'ird' };
+  fs.writeFileSync(pj, JSON.stringify(cfg));
+  let r = w.forge(['doctor']);
+  assert.match(r.out, /✓ tracker openproject: API key from macOS Keychain \(se-forge-openproject\)/);
+  assert.match(r.out, /tracker openproject: no boards configured, status mode/);
+  assert.ok(!r.out.includes('op-keychain-key'), 'doctor names the source, never the key');
+  cfg.project.openproject.boards = { issues: 109 };
+  fs.writeFileSync(pj, JSON.stringify(cfg));
+  r = w.forge(['tracker', 'list', 'board', 'all']);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /^### issues \(109\)\n== Todo\n {2}#42 Login {2}\[Todo\] {2}Amal$/m);
+  assert.ok(!r.out.includes('op-keychain-key'));
+  assert.match(fs.readFileSync(log, 'utf8'), /^https:\/\/op\.example\.com\/api\/v3\/grids\/109$/m, 'the URL from project.json');
+  fs.writeFileSync(log, '');
+  w.env.OPENPROJECT_URL = 'https://override.example.com';
+  w.env.OPENPROJECT_API_KEY = 'op-env-key';
+  assert.equal(w.forge(['tracker', 'list', 'board', 'issues']).code, 0);
+  const calls = fs.readFileSync(log, 'utf8');
+  assert.match(calls, /^https:\/\/override\.example\.com\/api\/v3\/grids\/109$/m, 'a variable already set wins');
+  assert.doesNotMatch(calls, /op\.example\.com/);
+  r = w.forge(['doctor']);
+  assert.match(r.out, /✓ tracker openproject: API key from env OPENPROJECT_API_KEY/);
+  assert.match(r.out, /✓ tracker openproject: boards issues=109/);
+  assert.ok(!r.out.includes('op-env-key'));
+});
+
 test('forge config check validates a proposal before it is applied', () => {
   const w = world();
   const good = path.join(w.base, 'good.json');

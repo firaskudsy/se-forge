@@ -1,19 +1,20 @@
 ---
 name: tracker
-description: How agents use the project's tracker (GitLab or GitHub) through `forge tracker` - read a ticket, list a board or a status, raise [Backend request] / [Story conflict] Tasks with a relation and a board column, move a status by name, comment, look up the exact status names. The adapter loads its own credentials by variable name and never prints them; TRACKER_DRY_RUN=1 shows a write without making it.
+description: How agents use the project's tracker (GitLab, GitHub or OpenProject) through `forge tracker` - read a ticket, list a board or a status, raise [Backend request] / [Story conflict] Tasks with a relation and a board column, move a status by name, comment, look up the exact status names. The adapter loads its own credentials by variable name and never prints them; TRACKER_DRY_RUN=1 shows a write without making it.
 argument-hint: "<forge tracker command>"
 ---
 
 # Tracker (`forge tracker`)
 
-`forge tracker` runs the adapter for the project's tracker: `project.tracker` is `github` or `gitlab`, and `FORGE_TRACKER` overrides it. Agents do not read `.env.local` and never echo a token; the adapter finds what it needs by **variable name**.
+`forge tracker` runs the adapter for the project's tracker: `project.tracker` is `github`, `gitlab` or `openproject`, and `FORGE_TRACKER` overrides it. Agents do not read `.env.local` and never echo a token; the adapter finds what it needs by **variable name**.
 
 | Tracker | Sign-in and settings | Statuses and types | Board columns |
 |---|---|---|---|
 | GitHub | `GH_TOKEN` or `gh auth login`; `GH_REPO`, `GH_PROJECT_OWNER`, `GH_PROJECT_NUMBER` (`GH_PROJECT_ISSUES_NUMBER`, `GH_PROJECT_FRONTEND_NUMBER` per board) | labels `status:<Name>`, `type:<Name>` | the Status field of a Projects (v2) board |
 | GitLab | `GITLAB_TOKEN` or `glab auth login`; `GITLAB_HOST` for a self-managed server, `GITLAB_REPO` | labels `status::<Name>`, `type::<Name>` | label lists: the card gets the list's label |
+| OpenProject | `project.openproject` in project.json (`url`, `project`, `boards`, `defaultBoard`, `readyStatus`; forge passes them as `OPENPROJECT_*`, a variable already set wins); the API key from `OPENPROJECT_API_KEY`, the macOS Keychain, the Linux keyring or a private key file (GUIDE.md, G), never in project.json | OpenProject's own statuses and work package types; no labels: `--source`/`--area`/`--repo` become a `Labels:` line in the description, and `ready` is a status (`readyStatus`, default Todo) | the configured basic boards (`list board [<name\|id\|all>]`): `status` moves the card on every board it sits on, to the column named like the status when there is one, else by the default mapping (In Development and Code review → In Process; In Testing, Ready for QA, In QA → In Testing; Ready for Release → To Be Deployed; Done, Closed, Resolved → Complete; Rejected → Canceled; On hold, Blocked, Pending → Pending; Todo and Ready for Development stay). No boards: status mode, `list board` groups by status and no card moves |
 
-On GitLab a related ticket becomes an issue link; on GitHub a "Relates to #<id>" line. `forge tracker help` prints every command:
+On GitLab a related ticket becomes an issue link, on OpenProject a relates relation; on GitHub a "Relates to #<id>" line. `forge tracker help` prints every command:
 
 ```bash
 forge tracker get <id> [--json]                    # title, status, assignee, description

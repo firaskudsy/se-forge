@@ -123,7 +123,7 @@ test('github: works on bash 3.2 without GH_REPO (the audit crash) and dry run wr
 test('an unknown tracker fails clearly', () => {
   const r = tracker('glab', ['get', '1'], { FORGE_TRACKER: 'jira' });
   assert.equal(r.code, 2);
-  assert.match(r.err, /github or gitlab/);
+  assert.match(r.err, /github, gitlab or openproject/);
 });
 
 // The real glab, when installed: every subcommand and flag the adapter uses must exist.

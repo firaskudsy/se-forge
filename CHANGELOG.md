@@ -8,6 +8,26 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ## [Unreleased]
 
+### Added
+- **OpenProject tracker adapter** (`core/tracker/adapters/openproject.sh`): `project.tracker: "openproject"` runs every
+  `forge tracker` command against OpenProject's REST API v3 with curl and jq. OpenProject has no labels:
+  `--source`/`--area`/`--repo` go into a `Labels:` line, and `ready` is a status.
+- **`project.openproject`** in project.json: `url`, `project` (identifier, id or address), `boards` (name → basic board
+  id), `board` (one board's shorthand), `defaultBoard` and `readyStatus`, validated by `forge config check`. Forge passes
+  them to the adapter as `OPENPROJECT_*`; a variable already set wins.
+- **The API key never in project.json** (`core/tracker/openproject-key.sh`): taken from `OPENPROJECT_API_KEY`, the macOS
+  Keychain, the Linux keyring (secret-tool) or a key file readable by its owner only, in that order (GUIDE.md, G). It
+  reaches curl on a file descriptor, never in its arguments or output; `forge doctor` names its source, not its value.
+- **Several boards:** `list board [<name|id|all>]`; `status` moves the card on every configured board it sits on, to the
+  column named like the status, else by a default mapping (In Development → In Process, Done → Complete, …). A board
+  OpenProject does not have is named in one line and skipped. With no board configured, status mode: `list board`
+  groups by status and no card moves, and `forge doctor` says so.
+- `forge init --tracker openproject`; `project.tracker` is validated (gitlab, github or openproject); `forge doctor`
+  checks curl, jq, the URL and project settings, the key's source and the boards.
+
+### Changed
+- The dashboard has no issue history for OpenProject (it says so) and links a ticket only to the address the tracker gave.
+
 ## [0.2.33] - 2026-10-17
 
 ### Added
