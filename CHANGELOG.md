@@ -8,6 +8,8 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ## [Unreleased]
 
+## [0.2.36] - 2026-10-25
+
 ### Added
 - **OpenProject tracker adapter** (`core/tracker/adapters/openproject.sh`): `project.tracker: "openproject"` runs every
   `forge tracker` command against OpenProject's REST API v3 with curl and jq. OpenProject has no labels:

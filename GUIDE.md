@@ -251,21 +251,21 @@ succeed".
    **Method 1: from the kit folder on this Mac** (the kit is not on GitLab yet; this Mac has the folder, or a
    copy of it with its hidden `.git` folder; here it is `~/code/se-forge`, use yours):
    ```
-   npm install -g git+file://$HOME/code/se-forge#v0.2.35
+   npm install -g git+file://$HOME/code/se-forge#v0.2.36
    forge setup --team-repo ~/code/se-forge-projects --kit-repo ~/code/se-forge
    forge version
    ```
-   `forge version` prints 0.2.35.
+   `forge version` prints 0.2.36.
 
    **Method 2: from GitLab** (the kit is pushed to `se-forge`, step A3; every teammate can use this):
    ```
-   npm install -g git+ssh://git@gitlab.example.com/<group>/se-forge.git#v0.2.35
+   npm install -g git+ssh://git@gitlab.example.com/<group>/se-forge.git#v0.2.36
    forge setup --team-repo ~/code/se-forge-projects --kit-repo git@gitlab.example.com:<group>/se-forge.git
    forge version
    ```
-   `forge version` prints 0.2.35.
+   `forge version` prints 0.2.36.
 
-   Both install the kit as it was at the tag `v0.2.35`, so later edits to the folder don't change your `forge`.
+   Both install the kit as it was at the tag `v0.2.36`, so later edits to the folder don't change your `forge`.
    For a newer version, run the same `npm install` line with the new tag. To move from method 1 to method 2,
    run method 2's lines: your projects don't change.
 8. **Figma, only for apps whose screens are in Figma**: the kit's designer agent draws them there, or the client
