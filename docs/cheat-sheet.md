@@ -2,10 +2,70 @@
 
 One page for the team. Details: the README, the skills (`core/skills/`), and `docs/decisions.md` for why.
 
-## Once per machine
-`npm install -g git+ssh://…/se-forge.git#vX.Y.Z`, clone `se-forge-projects`, then
-`forge setup --team-repo <clone> --kit-repo <kit url>`. Before the kit is on GitLab: `git+file://<kit folder>#vX.Y.Z` and
-`--kit-repo <kit folder>` (GUIDE.md, B7). Needs Node 22+, Docker Desktop, git, `glab` or `gh`, jq. Figma projects: `claude plugin install figma` (GUIDE.md, B8).
+## Step by step, from a new Mac
+The team's GitLab is https://git.lightring.dev, group `ai` (https://git.lightring.dev/ai); you need an account there
+with access to the group. Every step in detail: GUIDE.md, parts B and C.
+
+The example: a new team member, `user@example.com`, starts the app `demo-app` for the client "Demo Client", whose
+requirements are in `~/Downloads/demo-app-requirements.pdf`. For your own app, change those four.
+
+**1. The tools.** Skip the Homebrew line if you have it. Then open Docker Desktop once, and log in to Claude Code
+(`claude`, then `/exit`).
+```
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+brew install node git jq glab gitleaks
+brew install --cask docker
+curl -fsSL https://claude.ai/install.sh | bash
+```
+
+**2. GitLab access.** Add the SSH key in https://git.lightring.dev (avatar → Edit profile → SSH Keys), and make a
+token with the scopes `api` and `write_repository` (Access tokens) for glab.
+```
+ls ~/.ssh/id_ed25519.pub || ssh-keygen -t ed25519 -C "user@example.com"
+pbcopy < ~/.ssh/id_ed25519.pub
+ssh -T git@git.lightring.dev                       # "Welcome to GitLab, @your-name!"
+glab auth login --hostname git.lightring.dev       # paste the token, choose SSH
+glab config set -g host git.lightring.dev
+```
+
+**3. forge and the team repo.**
+```
+mkdir -p ~/code && cd ~/code
+git clone git@git.lightring.dev:ai/se-forge-projects.git
+npm install -g git+https://github.com/firaskudsy/se-forge.git#v0.2.35
+forge setup --team-repo ~/code/se-forge-projects --kit-repo https://github.com/firaskudsy/se-forge.git
+forge version                                    # 0.2.35
+```
+Figma projects: `claude plugin install figma`, then log in through `/plugin` (GUIDE.md, B8).
+
+**4. A new app.** In https://git.lightring.dev/ai → New project → Create blank project: name `demo-app`, private,
+with a README. Then:
+```
+cd ~/code && git clone git@git.lightring.dev:ai/demo-app.git && cd demo-app
+forge init --project demo-app --new --client "Demo Client"
+git push -u origin dev staging
+forge save -m "new project"
+forge doctor                                     # ✓ everywhere
+```
+Protect its branches in GitLab: default branch `dev`; nobody pushes to `dev`, `staging` or `main`; `api-v*` tags by
+Maintainers; pipelines must succeed (GUIDE.md, C3).
+
+**5. Plan and build.** Start Claude Code in its normal permission mode, not auto (in auto every approval is refused).
+```
+mkdir -p .forge/project/bootstrap/inputs
+cp ~/Downloads/demo-app-requirements.pdf .forge/project/bootstrap/inputs/
+claude
+```
+In Claude Code: `/bootstrap .forge/project/bootstrap/inputs/demo-app-requirements.pdf`, answer its questions, approve
+`.forge/project/bootstrap/review.md`, and merge the merge requests it opens. Then `/pipeline next 1`.
+
+**Joining an existing app** (a teammate joining `demo-app` later): steps 1 to 3, then
+```
+cd ~/code && git clone git@git.lightring.dev:ai/demo-app.git && cd demo-app
+forge init --project demo-app
+forge doctor
+claude
+```
 
 ## A project
 | You want to | Run |

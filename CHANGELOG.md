@@ -33,6 +33,9 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ### Changed
 - The dashboard has no issue history for OpenProject (it says so) and links a ticket only to the address the tracker gave.
+- `docs/cheat-sheet.md` starts with a step by step from a new Mac to a running build, worked through for an example app
+  (`demo-app`): the tools, GitLab access, `forge` installed from the kit's GitHub repository, a new app, then
+  `/bootstrap` and `/pipeline`.
 
 ## [0.2.35] - 2026-10-22
 
