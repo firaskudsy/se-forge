@@ -3,6 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -137,4 +138,62 @@ test('a ticket\'s link: the address the tracker gave, else one made from the rem
   assert.equal(issueLinks({ issues: [{ id: 12, url: 'https://gitlab.example.com/ai/lunch-pool/-/issues/12#moved' }], remote: 'git@h:g/a.git' })(12), 'https://gitlab.example.com/ai/lunch-pool/-/issues/12#moved');
   assert.equal(issueLinks({ remote: '/tmp/client.git' })(1), null, 'a local remote: no link');
   assert.equal(issueLinks({})(1), null);
+});
+
+// A fake OpenProject: statuses, one board whose column query holds #10 and #11, their activities; the key checked.
+function openproject() {
+  const wp = (id, subject, status, raw = '') => ({ id, subject, createdAt: at(0), updatedAt: at(200), description: { raw }, _links: { status: { title: status }, type: { title: 'Task' } } });
+  const routes = {
+    '/api/v3/statuses': { _embedded: { elements: [{ name: 'Todo', isClosed: false }, { name: 'In Development', isClosed: false }, { name: 'Ready for QA', isClosed: false }, { name: 'Done', isClosed: true }] } },
+    '/api/v3/grids/81': { widgets: [{ options: { queryId: 5 } }, { options: {} }] },
+    '/api/v3/queries/5': { _embedded: { results: { _embedded: { elements: [wp(10, 'Drop tracks', 'Done', 'Some text\n\nLabels: source::ai area::ui'), wp(11, 'Filters', 'In Development')] } } } },
+    '/api/v3/work_packages/10/activities': { _embedded: { elements: [
+      { createdAt: at(0), details: [{ raw: 'Status set to Todo' }] },
+      { createdAt: at(60), details: [{ raw: 'Status changed from **Todo** to **In Development**' }, { raw: 'Assignee set to X' }] },
+      { createdAt: at(120), details: [{ raw: 'Status changed from In Development to Ready for QA' }] },
+      { createdAt: at(200), details: [{ raw: 'Status changed from Ready for QA to Done' }] },
+    ] } },
+    '/api/v3/work_packages/11/activities': { _embedded: { elements: [{ createdAt: at(0), details: [{ raw: 'Status set to Todo' }] }, { createdAt: at(30), details: [{ raw: 'Status changed from Todo to In Development' }] }] } },
+  };
+  const calls = [];
+  const server = http.createServer((req, res) => {
+    calls.push(req.url.split('?')[0]);
+    const body = routes[req.url.split('?')[0]];
+    const ok = req.headers.authorization === `Basic ${Buffer.from('apikey:k1').toString('base64')}`;
+    res.writeHead(!ok ? 401 : body ? 200 : 404, { 'content-type': 'application/json' });
+    res.end(JSON.stringify(ok && body ? body : {}));
+  });
+  return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve({ server, calls, url: `http://127.0.0.1:${server.address().port}` })));
+}
+
+test('OpenProject: the board\'s work packages, their status changes as events, the key only in the header', async () => {
+  const op = await openproject();
+  try {
+    const env = { OPENPROJECT_URL: op.url, OPENPROJECT_API_KEY: 'k1', OPENPROJECT_DASHBOARD_BOARDS: '81' };
+    const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'forge-issues-'));
+    const r = await readIssues({ main: '.', stateDir, tracker: 'openproject', env });
+    assert.equal(r.error, null);
+    assert.equal(r.host, 'OpenProject');
+    const byId = Object.fromEntries(r.issues.map((i) => [i.id, i]));
+    assert.deepEqual(byId[10].labels, ['status::Done', 'type::Task', 'source::ai', 'area::ui']);
+    assert.equal(byId[10].url, `${op.url}/work_packages/10`);
+    assert.deepEqual(issueBands(byId[10]).map((b) => b.band), ['open', 'progress', 'testing', 'closed']);
+    assert.deepEqual(issueBands(byId[11]).map((b) => b.band), ['open', 'progress']);
+    assert.deepEqual(issueFlow(r.issues).now, { closed: 1, testing: 0, progress: 1, open: 0 });
+    assert.doesNotMatch(fs.readFileSync(path.join(stateDir, 'issues.json'), 'utf8'), /k1/);
+    op.calls.length = 0;
+    await readIssues({ main: '.', stateDir, tracker: 'openproject', env });
+    assert.deepEqual(op.calls, ['/api/v3/grids/81', '/api/v3/queries/5'], 'nothing changed: only the board');
+    const bad = await readIssues({ main: '.', stateDir, tracker: 'openproject', env: { ...env, OPENPROJECT_API_KEY: 'wrong' } });
+    assert.match(bad.error, /HTTP 401/);
+    assert.doesNotMatch(bad.error, /wrong/);
+    assert.equal(bad.issues.length, 2, 'the last read stands');
+  } finally {
+    op.server.close();
+  }
+});
+
+test('the band: OpenProject\'s development and QA statuses', () => {
+  for (const s of ['In Development', 'Code review']) assert.equal(band(false, s), 'progress');
+  for (const s of ['Ready for QA', 'In QA', 'Ready for Release']) assert.equal(band(false, s), 'testing');
 });

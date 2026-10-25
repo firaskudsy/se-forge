@@ -1,6 +1,7 @@
 // The tracker's issues over time (decision 122): each issue's status label and open/closed state through its life,
-// from GitLab's resource events or GitHub's issue events. Kept in .forge/state/issues.json, so a later run fetches
-// only the issues that changed, and the page still draws from the last read when the tracker cannot be reached.
+// from GitLab's resource events, GitHub's issue events or OpenProject's activities. Kept in .forge/state/issues.json,
+// so a later run fetches only the issues that changed, and the page still draws from the last read when the tracker
+// cannot be reached.
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -49,6 +50,30 @@ async function each(items, fn) {
   return out;
 }
 
+// OpenProject through its REST API v3, with OPENPROJECT_URL, OPENPROJECT_API_KEY and OPENPROJECT_PROJECT read by
+// name (the key goes in a header, never in output). The boards drawn are OPENPROJECT_DASHBOARD_BOARDS (ids,
+// comma-separated) or OPENPROJECT_BOARD; with neither, the whole project.
+async function op(env, endpoint) {
+  const base = String(env.OPENPROJECT_URL || '').replace(/\/+$/, '');
+  if (!base || !env.OPENPROJECT_API_KEY) throw new Error('OPENPROJECT_URL and OPENPROJECT_API_KEY are not set');
+  const res = await fetch(`${base}/api/v3${endpoint}`, {
+    headers: { Authorization: `Basic ${Buffer.from(`apikey:${env.OPENPROJECT_API_KEY}`).toString('base64')}` }, signal: AbortSignal.timeout(30000),
+  });
+  if (!res.ok) throw new Error(`openproject ${endpoint.split('?')[0]}: HTTP ${res.status}`);
+  return res.json();
+}
+// The closed status names, read once per OpenProject address.
+const opClosedNames = new Map();
+const opClosed = (env) => {
+  const base = String(env.OPENPROJECT_URL || '');
+  if (!opClosedNames.has(base)) opClosedNames.set(base, op(env, '/statuses').then((r) => new Set(r._embedded.elements.filter((s) => s.isClosed).map((s) => s.name))));
+  return opClosedNames.get(base);
+};
+// A work package's status and type as labels, plus the "Labels: source::ai area::ui" line the adapter writes.
+const opLabels = (w) => [`status::${w._links.status.title}`, `type::${w._links.type.title}`, ...(/Labels: (.+)\s*$/.exec(w.description?.raw || '')?.[1].trim().split(/\s+/) ?? [])];
+// "Status changed from Todo to In Development" or "Status set to Todo" in a journal's details.
+const OP_STATUS = /^Status (?:changed from (.+) to|set to) (.+)$/;
+
 // Per host: the issues (id, title, labels, closed, created, updated) and one issue's events, oldest first:
 // { at, label, add } for a label added or removed, { at, closed } for a close or a reopen.
 // board: a system's board project ("group/board", decision 131) in place of the checkout's own repository.
@@ -69,6 +94,37 @@ const HOSTS = {
     events: async (id, cwd, env, board) => (await pages('gh', `repos/${board || '{owner}/{repo}'}/issues/${id}/events`, cwd, env)).flatMap((e) => (
       ['labeled', 'unlabeled'].includes(e.event) ? [{ at: e.created_at, label: e.label?.name ?? '', add: e.event === 'labeled' }]
         : ['closed', 'reopened'].includes(e.event) ? [{ at: e.created_at, closed: e.event === 'closed' }] : [])),
+  },
+  openproject: {
+    name: 'OpenProject',
+    list: async (cwd, env) => {
+      const closed = await opClosed(env);
+      const boards = String(env.OPENPROJECT_DASHBOARD_BOARDS || env.OPENPROJECT_BOARD || '').split(',').map((b) => b.trim()).filter(Boolean);
+      const wps = new Map();
+      const add = (r) => (r._embedded.results ?? r)._embedded.elements.forEach((w) => wps.set(w.id, w));
+      for (const b of boards) {
+        for (const w of (await op(env, `/grids/${b}`)).widgets) if (w.options?.queryId) add(await op(env, `/queries/${w.options.queryId}?pageSize=1000`));
+      }
+      if (!boards.length) {
+        const project = String(env.OPENPROJECT_PROJECT || '').replace(/^.*\/projects\//, '').split('/')[0];
+        add(await op(env, `/projects/${project}/work_packages?pageSize=1000&filters=${encodeURIComponent('[{"status":{"operator":"*","values":null}}]')}`));
+      }
+      const url = String(env.OPENPROJECT_URL).replace(/\/+$/, '');
+      return [...wps.values()].map((w) => ({ id: w.id, title: w.subject, labels: opLabels(w), closed: closed.has(w._links.status.title), created: w.createdAt, updated: w.updatedAt, url: `${url}/work_packages/${w.id}` }));
+    },
+    events: async (id, cwd, env) => {
+      const closed = await opClosed(env);
+      return (await op(env, `/work_packages/${id}/activities`))._embedded.elements.flatMap((a) => (a.details || []).flatMap((d) => {
+        const m = OP_STATUS.exec(String(d.raw ?? '').replace(/\*/g, '').trim());
+        if (!m) return [];
+        const [, from, to] = m;
+        return [
+          ...(from ? [{ at: a.createdAt, label: `status::${from}`, add: false }] : []),
+          { at: a.createdAt, label: `status::${to}`, add: true },
+          ...(from && closed.has(from) !== closed.has(to) ? [{ at: a.createdAt, closed: closed.has(to) }] : []),
+        ];
+      }));
+    },
   },
 };
 
@@ -103,7 +159,8 @@ const statusOf = (labels) => [...labels].map((l) => STATUS.exec(l)?.[1]).find(Bo
 export function band(closed, status) {
   const s = String(status ?? '').trim().toLowerCase();
   if (closed || ['done', 'closed', 'resolved'].includes(s)) return 'closed';
-  return s === 'in testing' ? 'testing' : s === 'in progress' ? 'progress' : 'open';
+  return ['in testing', 'ready for qa', 'in qa', 'ready for release'].includes(s) ? 'testing'
+    : ['in progress', 'in development', 'code review'].includes(s) ? 'progress' : 'open';
 }
 export const isEpic = (i) => i.labels.some((l) => /^type::?epic$/i.test(l)) || /^\[epic\]/i.test(i.title || '');
 
@@ -185,7 +242,8 @@ export function issueLinks({ issues = [], remote = '', tracker = 'gitlab' }) {
   const known = new Map(issues.filter((i) => i.url).map((i) => [Number(i.id), i.url]));
   const m = /^(?:\w+:\/\/)?(?:[^@/]+@)?([^/:]+)(?::\d+)?[:/](.+?)(?:\.git)?\/?$/.exec(String(remote).trim());
   const base = m && !/^\//.test(m[2]) ? `https://${m[1]}/${m[2]}` : null;
-  return (num) => known.get(Number(num)) ?? (base ? `${base}${tracker === 'github' ? '' : '/-'}/issues/${num}` : null);
+  // OpenProject's work packages are not under the repository's remote: only the address it gave is known.
+  return (num) => known.get(Number(num)) ?? (base && tracker !== 'openproject' ? `${base}${tracker === 'github' ? '' : '/-'}/issues/${num}` : null);
 }
 
 // "3 open, 0 in progress, 0 in testing, 22 closed", top band first.

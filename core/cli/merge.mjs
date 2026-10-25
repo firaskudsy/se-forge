@@ -16,6 +16,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { makeContext, git, readState } from '../policy/lib/context.mjs';
 import { testsCheck } from '../policy/lib/gates.mjs';
+import { trackerEnv } from '../policy/lib/config.mjs';
 import { matchAny } from '../policy/lib/paths.mjs';
 import { readReport, PASSING } from '../policy/lib/reports.mjs';
 import { memberOf, systemOf, deploysOn, repoOf } from '../policy/lib/system.mjs';
@@ -30,8 +31,7 @@ const TRACKER = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../t
 // A merged ticket is Done (decision 118). A failure is reported, never undoes the merge.
 function closeTicket(ctx, ticket, note, cwd, env) {
   if (!/^\d+$/.test(String(ticket))) return `${ticket} is not a tracker issue number: no status to change`;
-  const board = ctx.project.board ? { [ctx.project.tracker === 'github' ? 'GH_REPO' : 'GITLAB_REPO']: ctx.project.board } : {};
-  const r = spawnSync('bash', [TRACKER, 'status', String(ticket), 'Done', '--comment', note], { cwd, encoding: 'utf8', env: { ...env, FORGE_TRACKER: env.FORGE_TRACKER || ctx.project.tracker, ...board } });
+  const r = spawnSync('bash', [TRACKER, 'status', String(ticket), 'Done', '--comment', note], { cwd, encoding: 'utf8', env: { ...env, ...trackerEnv(ctx.project, env) } });
   if (r.status === 0) return `#${ticket} -> Done (its issue is closed)`;
   return `the tracker did not move #${ticket} (${((r.stderr || r.stdout || '').trim().split('\n').pop() || `exit ${r.status}`)}): run forge tracker status ${ticket} Done`;
 }

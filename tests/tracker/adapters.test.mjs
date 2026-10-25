@@ -120,19 +120,44 @@ test('github: works on bash 3.2 without GH_REPO (the audit crash) and dry run wr
   assert.ok(writes(live.calls).some((c) => c.startsWith('issue edit 7 --remove-label status:Todo --add-label status:In Testing')));
 });
 
+test('gitlab and github: create --assignee and assign pass the username to the CLI', () => {
+  const gl = tracker('glab', ['create', '--subject', 'x', '--assignee', 'amal']);
+  assert.equal(gl.code, 0, gl.err);
+  assert.ok(writes(gl.calls).some((c) => c.startsWith('issue create --title x') && c.includes('--assignee amal')), gl.calls.join('\n'));
+  const glEnv = tracker('glab', ['create', '--subject', 'x'], { TRACKER_ASSIGNEE: 'omar' });
+  assert.ok(writes(glEnv.calls).some((c) => c.includes('--assignee omar')));
+  const glNone = tracker('glab', ['create', '--subject', 'x']);
+  assert.ok(!glNone.calls.some((c) => c.includes('--assignee')), 'unassigned by default');
+  const gla = tracker('glab', ['assign', '12', 'amal']);
+  assert.equal(gla.code, 0, gla.err);
+  assert.deepEqual(writes(gla.calls), ['issue update 12 --assignee amal']);
+  assert.equal(gla.out, '#12 -> assignee amal\n');
+  const gh = tracker('gh', ['create', '--subject', 'x', '--assignee', 'amal']);
+  assert.ok(writes(gh.calls).some((c) => c.startsWith('issue create --title x') && c.includes('--assignee amal')), gh.calls.join('\n'));
+  const gha = tracker('gh', ['assign', '7', 'amal']);
+  assert.equal(gha.code, 0, gha.err);
+  assert.deepEqual(writes(gha.calls), ['issue edit 7 --add-assignee amal']);
+  const unknown = tracker('glab', ['assign', '12', 'nobody'], { FAKE_FAIL: 'issue update 12 --assignee' });
+  assert.notEqual(unknown.code, 0);
+  assert.match(unknown.err, /could not assign #12 to 'nobody'/);
+  const dry = tracker('gh', ['assign', '7', 'amal'], { TRACKER_DRY_RUN: '1' });
+  assert.deepEqual(writes(dry.calls), []);
+  assert.match(dry.err, /DRY RUN: gh issue edit 7 --add-assignee amal/);
+});
+
 test('an unknown tracker fails clearly', () => {
   const r = tracker('glab', ['get', '1'], { FORGE_TRACKER: 'jira' });
   assert.equal(r.code, 2);
-  assert.match(r.err, /github or gitlab/);
+  assert.match(r.err, /github, gitlab or openproject/);
 });
 
 // The real glab, when installed: every subcommand and flag the adapter uses must exist.
 const realGlab = spawnSync('glab', ['--version']).status === 0;
 test('gitlab: the installed glab accepts every flag the adapter uses', { skip: !realGlab && 'glab not installed' }, () => {
   const uses = {
-    'issue create': ['--title', '--description', '--label', '--linked-issues', '--link-type', '--yes'],
+    'issue create': ['--title', '--description', '--label', '--linked-issues', '--link-type', '--assignee', '--yes'],
     'issue view': ['--output'], 'issue list': ['--output', '--all', '--label', '--per-page'],
-    'issue update': ['--label', '--unlabel'], 'issue note': ['--message'], 'issue close': [], 'issue reopen': [],
+    'issue update': ['--label', '--unlabel', '--assignee'], 'issue note': ['--message'], 'issue close': [], 'issue reopen': [],
     'label list': ['--output', '--per-page'], 'label create': ['--name'], api: [],
     'mr create': ['--draft', '--title', '--description'], 'mr update': ['--ready'], // skills ticket, commit-pr
   };
@@ -154,8 +179,8 @@ test('help needs no tracker CLI and prints only the usage', () => {
 const realGh = spawnSync('gh', ['--version']).status === 0;
 test('github: the installed gh accepts every flag the adapter uses', { skip: !realGh && 'gh not installed' }, () => {
   const uses = {
-    'issue create': ['--title', '--body', '--label', '--repo'], 'issue view': ['--json'],
-    'issue list': ['--state', '--label', '--limit', '--json'], 'issue edit': ['--add-label', '--remove-label'],
+    'issue create': ['--title', '--body', '--label', '--assignee', '--repo'], 'issue view': ['--json'],
+    'issue list': ['--state', '--label', '--limit', '--json'], 'issue edit': ['--add-label', '--remove-label', '--add-assignee'],
     'issue comment': ['--body', '--body-file'], 'issue close': [], 'issue reopen': [],
     'label list': ['--limit', '--json'], 'label create': ['--force'],
     'project view': ['--owner', '--format'], 'project field-list': ['--owner', '--format'],

@@ -89,6 +89,12 @@ tr_status() {
   echo "#$id -> status $status"
 }
 
+tr_assign() {
+  local id="${1:?forge tracker assign needs a ticket id}" name="${2:?forge tracker assign needs the assignee login}"
+  gh_write issue edit "$id" --add-assignee "$name" >/dev/null || { echo "tracker: could not assign #$id to '$name'" >&2; return 1; }
+  echo "#$id -> assignee $name"
+}
+
 tr_ready() {
   local id="${1:?forge tracker ready needs a ticket id}" note
   note="$(tk_note "${@:2}")"
@@ -140,6 +146,7 @@ tr_create() {
   local labels=("type:$tk_type" "status:$tk_status") flags=() pair label id url
   for pair in ${tk_extra[@]+"${tk_extra[@]}"}; do labels+=("${pair%% *}:${pair#* }"); done
   for label in "${labels[@]}"; do flags+=(--label "$label"); done
+  [[ -z "$tk_assignee" ]] || flags+=(--assignee "$tk_assignee")
   for id in ${tk_relates[@]+"${tk_relates[@]}"}; do printf -v tk_desc '%s\n\nRelates to #%s' "$tk_desc" "$id"; done
   if tk_dry; then
     echo "DRY RUN: gh issue create --title '$tk_subject' ${flags[*]} --body <${#tk_desc} chars>" >&2

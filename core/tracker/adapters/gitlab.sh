@@ -77,6 +77,12 @@ tr_status() {
   echo "#$id -> status $status"
 }
 
+tr_assign() {
+  local id="${1:?forge tracker assign needs a ticket id}" name="${2:?forge tracker assign needs the assignee username}"
+  gl_write issue update "$id" --assignee "$name" >/dev/null || { echo "tracker: could not assign #$id to '$name'" >&2; return 1; }
+  echo "#$id -> assignee $name"
+}
+
 tr_ready() {
   local id="${1:?forge tracker ready needs a ticket id}" note
   note="$(tk_note "${@:2}")"
@@ -115,6 +121,7 @@ tr_create() {
   for pair in ${tk_extra[@]+"${tk_extra[@]}"}; do labels+=("${pair%% *}::${pair#* }"); done
   for id in ${tk_relates[@]+"${tk_relates[@]}"}; do links+=(--linked-issues "$id"); done
   [[ ${#links[@]} -eq 0 ]] || links+=(--link-type relates_to)
+  [[ -z "$tk_assignee" ]] || links+=(--assignee "$tk_assignee")
   joined="$(IFS=,; echo "${labels[*]}")"
   if tk_dry; then
     echo "DRY RUN: glab issue create --title '$tk_subject' --label $joined ${links[*]+${links[*]}} --description <${#tk_desc} chars> --yes" >&2

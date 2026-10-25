@@ -6,6 +6,7 @@ import { checkMemberGit } from './rules/system.mjs';
 import { checkGit } from './rules/git.mjs';
 import { checkGh, checkGlab, checkForgeMerge, checkForgeNew, checkForgeLimits, checkForgeLane } from './rules/hosts.mjs';
 import { checkSecrets, checkDownloadAndRun } from './rules/secrets.mjs';
+import { checkKeys } from './rules/keys.mjs';
 import { checkOps } from './rules/ops.mjs';
 import { checkOutput } from './rules/output.mjs';
 import { checkTracker } from './rules/tracker.mjs';
@@ -173,6 +174,7 @@ export function checkBash(command, session) {
     const gitC = a0 === 'git' ? c.argv.indexOf('-C') : -1;
     ctx = gitC > 0 && c.argv[gitC + 1] && !/[$`]/.test(c.argv[gitC + 1]) ? contextAt(session, path.resolve(dir ?? session.cwd, c.argv[gitC + 1])) : here;
     findings.push(...checkSecrets(c, a0, ctx));
+    findings.push(...checkKeys(c, a0, ctx));
     if (!a0) { findings.push(...checkOps(c, a0, ctx)); return; }
     // A done claim is checked in the folder the command runs in, after any `cd` before it.
     const where = (list) => list.map((f) => (f.decision === 'done' ? { ...f, cwd: dir } : f));

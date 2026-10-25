@@ -4,8 +4,8 @@ import { isSecretPath, resolvePath, wordNamesSecret } from '../paths.mjs';
 import { gitSecretSafe } from './git.mjs';
 
 // Commands that only look at names or metadata, never at content.
-const METADATA = new Set(['ls', 'stat', 'test', '[', '[[', 'file', 'du', 'realpath', 'readlink', 'dirname', 'basename', 'chmod', 'chown']);
-const GREP_LIKE = new Set(['grep', 'egrep', 'fgrep', 'rg', 'ag', 'ack']);
+export const METADATA = new Set(['ls', 'stat', 'test', '[', '[[', 'file', 'du', 'realpath', 'readlink', 'dirname', 'basename', 'chmod', 'chown']);
+export const GREP_LIKE = new Set(['grep', 'egrep', 'fgrep', 'rg', 'ag', 'ack']);
 const GREP_VALUE = new Set(['A', 'B', 'C', 'm', 'e', 'f', 'd', 'D', 'g', 't', 'T', 'j', 'M']);
 // Interpreters and text processors whose program text can open files by name.
 export const CODE_RUNNERS = new Set(['python', 'python3', 'node', 'deno', 'bun', 'ruby', 'perl', 'php', 'osascript', 'pwsh',
@@ -20,7 +20,7 @@ const SECRET_VAR_REF = /\$\{?([A-Za-z_][A-Za-z0-9_]*)/g;
 const refsSecretVar = (s) => [...String(s).matchAll(SECRET_VAR_REF)].some((m) => isSecretVarName(m[1]));
 
 // The same word may hide a path after "=" (--file=.env) or "@" (curl -d @.env).
-function candidates(word) {
+export function candidates(word) {
   const out = [word];
   const eq = word.indexOf('=');
   if (eq > 0) out.push(word.slice(eq + 1));
@@ -29,7 +29,7 @@ function candidates(word) {
   return out.filter(Boolean);
 }
 
-function withoutGrepPattern(args) {
+export function withoutGrepPattern(args) {
   let patternGiven = false;
   const rest = [];
   for (let i = 0; i < args.length; i++) {
@@ -59,6 +59,38 @@ function codeNamesSecret(text, ctx) {
   return false;
 }
 
+// A process's environment as a file (Linux, WSL, containers).
+export const PROC_ENVIRON = /\/proc\/[^/\s]+\/environ\b/;
+
+// ps shows environments with BSD-style `e` (ps eww, ps auxe) or macOS `-E`; `ps -e` only lists all processes.
+const PS_VALUE = new Set(['o', 'O', 'p', 'q', 'u', 'U', 'g', 'G', 't', 'C', 'k', 's', 'N', 'M']);
+function psShowsEnv(args) {
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a.startsWith('--')) continue;
+    if (a.startsWith('-')) {
+      if (a.includes('E')) return true;
+      if (PS_VALUE.has(a[a.length - 1])) i++;
+      continue;
+    }
+    if (/^[a-zA-Z]+$/.test(a) && a.includes('e')) return true;
+  }
+  return false;
+}
+
+// Interpreter code that prints the whole environment, not one variable by name.
+const ENV_DUMPS = [
+  [/^python3?$/, /\bos\.environ\b(?!\s*(\[|\.get\b|\.setdefault\b))/],
+  [/^(node|bun|deno)$/, /\bprocess\.env\b(?!\s*[.[])|\bDeno\.env\.toObject\b/],
+  [/^perl$/, /%ENV\b/],
+  [/^ruby$/, /\bENV\b(?!\s*(\[|\.fetch\b|\.key\?))/],
+  [/^php$/, /\bgetenv\(\s*\)|\$_(ENV|SERVER)\b(?!\s*\[)/],
+  [/awk$/, /\bENVIRON\b(?!\s*\[)/],
+  [/^jq$/, /(^|[^\w.$-])env\b(?![\w.-])|\$ENV\b(?!\s*\.)/],
+  [/^pwsh$/, /(^|[\s(])env:(?!\w)|GetEnvironmentVariables\(/i],
+];
+const codeDumpsEnv = (a0, code) => ENV_DUMPS.some(([who, rx]) => who.test(a0) && rx.test(code));
+
 const READ_MSG = 'Commands may not read, copy or stage secret files. Use .env.example for variable names; scripts load credentials by variable name.';
 
 export function checkSecrets(c, a0, ctx) {
@@ -84,7 +116,13 @@ export function checkSecrets(c, a0, ctx) {
   if (c.envDump) out.push(dump);
   if (a0 === 'printenv' && (!args.length || args.some(isSecretVarName))) out.push(args.length ? deny('secrets:print', 'Never print a secret variable.') : dump);
   if (a0 === 'set' && !args.length) out.push(dump);
-  if (['export', 'declare', 'typeset'].includes(a0) && args.every((a) => /^-[px]+$/.test(a))) out.push(dump);
+  if (['export', 'declare', 'typeset', 'readonly', 'local'].includes(a0) && args.every((a) => /^-[px]+$/.test(a))) out.push(dump);
+  if (['declare', 'typeset', 'readonly', 'local'].includes(a0) && args.some((a) => /^-\w*p/.test(a)) && args.some(isSecretVarName)) {
+    out.push(deny('secrets:print', 'Never print a secret variable.'));
+  }
+  if (!METADATA.has(a0) && [...args, ...c.assigns, ...c.redirects.map((r) => r.target)].some((w) => PROC_ENVIRON.test(w))) out.push(dump);
+  if (a0 === 'ps' && psShowsEnv(args)) out.push(dump);
+  if (CODE_RUNNERS.has(a0) && codeDumpsEnv(a0, [...args, ...c.stdin].join('\n'))) out.push(dump);
 
   if (['echo', 'printf', 'print', 'tee', 'logger', 'cat'].includes(a0) && (args.some(refsSecretVar) || c.stdin.some(refsSecretVar))) {
     out.push(deny('secrets:print', 'Never print a token, password or key, not even to check it is set. Test with `[ -n "$NAME" ]` instead.'));

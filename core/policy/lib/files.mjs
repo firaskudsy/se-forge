@@ -2,7 +2,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { deny, ask } from './decision.mjs';
-import { resolvePath, isSecretPath, isManifest, wordNamesSecret } from './paths.mjs';
+import { resolvePath, isSecretPath, isManifest, wordNamesSecret, isOpenProjectKeyPath, isOpenProjectKeyDir } from './paths.mjs';
+import { PROC_ENVIRON } from './rules/secrets.mjs';
 import { writeFindings } from './rules/targets.mjs';
 import { linkedPath } from './context.mjs';
 import { packageName, approvedAdd } from './rules/ops.mjs';
@@ -115,21 +116,38 @@ export function imageRefs(file, text) {
 }
 
 const READ_MSG = 'Secret files are never opened by agents. Use .env.example for variable names; scripts load credentials by variable name.';
+const KEY_MSG = 'The OpenProject API key file is never opened or written by an agent. Use `forge tracker`; it loads the key itself.';
+const ENV_MSG = 'A process environment file can print secrets. Ask for one variable by name instead.';
+
+// The OpenProject key file or its folder, a glob into that folder, or a process environment file.
+function keyFindings(paths, ctx) {
+  const abs = paths.map((p) => resolvePath(p, ctx.cwd, ctx.home));
+  if (abs.some((p) => isOpenProjectKeyPath(p) || isOpenProjectKeyDir(p))
+    || paths.some((p) => /(^|[/\\])openproject-key$/.test(p))) return [deny('openproject:key', KEY_MSG)];
+  if (paths.some((p) => PROC_ENVIRON.test(p))) return [deny('secrets:env-dump', ENV_MSG)];
+  return [];
+}
 
 export function checkFileTool(input, ctx) {
   const tool = input.tool_name;
   const ti = input.tool_input || {};
   if (READ_TOOLS.has(tool)) {
     const p = ti.file_path ?? ti.notebook_path;
+    const keys = p ? keyFindings([p], ctx) : [];
+    if (keys.length) return keys;
     return p && isSecretPath(resolvePath(p, ctx.cwd, ctx.home), ctx.config, ctx.home) ? [deny('secrets:read', READ_MSG)] : [];
   }
   if (tool === 'Grep') {
+    const keys = keyFindings([ti.path, ti.glob].filter(Boolean), ctx);
+    if (keys.length) return keys;
     const hits = [ti.path, ti.glob].filter(Boolean).some((p) => wordNamesSecret(p, ctx));
     return hits ? [deny('secrets:read', READ_MSG)] : [];
   }
   if (!WRITE_TOOLS.has(tool)) return [];
   const p = ti.file_path ?? ti.notebook_path;
   if (!p) return [];
+  const keys = keyFindings([p], ctx);
+  if (keys.length) return keys;
   const abs = linkedPath(resolvePath(p, ctx.cwd, ctx.home), ctx);
   const exists = fs.existsSync(abs);
   const out = writeFindings(abs, ctx, exists ? 'Editing' : 'Creating');

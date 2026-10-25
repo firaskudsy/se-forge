@@ -6,6 +6,7 @@ import path from 'node:path';
 import { makeRepo, ctxFor, decideBash, DEFAULT_TEST_CONFIG } from './helpers.mjs';
 import { combine } from '../../core/policy/lib/decision.mjs';
 import { checkFileTool } from '../../core/policy/lib/files.mjs';
+import { isSecretPath } from '../../core/policy/lib/paths.mjs';
 import { recordApproval } from '../../core/policy/lib/approvals.mjs';
 
 const { dir } = makeRepo();
@@ -132,4 +133,25 @@ test('a path through a symlink to the repository meets the same rules (git names
       assert.equal(decideBash(cmd, ctx).decision, want, `${cmd} (cwd ${cwd === dir ? 'real' : 'link'})`);
     }
   }
+});
+
+test('the OpenProject key file and process environments are closed to the file tools (openproject:key, secrets:env-dump)', () => {
+  const key = '/Users/dev/.config/se-forge/openproject-key';
+  const run = (tool, input) => combine(checkFileTool({ tool_name: tool, tool_input: input }, ctxFor(dir)));
+  for (const [tool, input, rule] of [
+    ['Read', { file_path: key }, 'openproject:key'],
+    ['Read', { file_path: '~/.config/se-forge/openproject-key' }, 'openproject:key'],
+    ['Grep', { pattern: '.', path: key }, 'openproject:key'],
+    ['Grep', { pattern: '.', path: '/Users/dev/.config/se-forge' }, 'openproject:key'],
+    ['Grep', { pattern: '.', path: '/Users/dev', glob: '**/openproject-key' }, 'openproject:key'],
+    ['Edit', { file_path: key, old_string: 'a', new_string: 'b' }, 'openproject:key'],
+    ['Write', { file_path: key, content: 'fake-key-123' }, 'openproject:key'],
+    ['Read', { file_path: '/proc/self/environ' }, 'secrets:env-dump'],
+  ]) {
+    const r = run(tool, input);
+    assert.equal(r.decision, 'deny', `${tool} ${JSON.stringify(input)}`);
+    assert.deepEqual(r.findings.map((f) => f.rule), [rule], `${tool} ${JSON.stringify(input)}`);
+  }
+  assert.equal(run('Read', { file_path: p('core/tracker/openproject-key.sh') }).decision, 'allow', 'the script that finds the key is code, not the key');
+  assert.equal(isSecretPath(key, ctxFor(dir).config, '/Users/dev'), true, 'git add and writes treat the key file as a secret');
 });

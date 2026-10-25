@@ -23,10 +23,11 @@ tk_need() {
 tk_note() { [[ "${1:-}" != "--comment" ]] || printf '%s' "${2:-}"; }
 
 # The options of `create`, shared by every adapter. They land in tk_subject, tk_desc, tk_type, tk_status,
-# tk_board, tk_column, tk_relates (ticket ids) and tk_extra: "<scope> <value>" pairs for the labels
-# --source, --area, --repo and --ready add, which each adapter writes in its own label syntax.
+# tk_board, tk_column, tk_assignee (--assignee, else TRACKER_ASSIGNEE, else none), tk_relates (ticket ids) and
+# tk_extra: "<scope> <value>" pairs for the labels --source, --area, --repo and --ready add, which each adapter
+# writes in its own label syntax.
 tk_create_args() {
-  tk_subject='' tk_desc='' tk_type=Task tk_status=Todo tk_board='' tk_column=Pending
+  tk_subject='' tk_desc='' tk_type=Task tk_status=Todo tk_board='' tk_column=Pending tk_assignee="${TRACKER_ASSIGNEE:-}"
   tk_relates=() tk_extra=()
   while (( $# )); do
     case "$1" in
@@ -39,6 +40,7 @@ tk_create_args() {
       --relates) tk_relates+=("$2") ;;
       --board) tk_board="$2" ;;
       --column) tk_column="$2" ;;
+      --assignee) tk_assignee="$2" ;;
       --source) tk_extra+=("source $2") ;;
       --area) tk_extra+=("area $2") ;;
       --repo) tk_extra+=("repo $2") ;;

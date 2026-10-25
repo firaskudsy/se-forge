@@ -302,3 +302,91 @@ test('commands inside loops, conditions and groups are checked (do/then/{ prefix
   assert.equal(decideBash('for i in 1 2; do echo $i; done', ctx).decision, 'allow');
   assert.equal(decideBash('while read -r l; do echo "$l"; done < /tmp/x', ctx).decision, 'allow');
 });
+
+const rulesOf = (c, ctx) => decideBash(c, ctx).findings.map((f) => f.rule);
+
+test('the OpenProject key never reaches an agent; keyring passwords and keychain dumps are denied (openproject:key, keychain:*)', () => {
+  const ctx = ctxFor(makeRepo().dir);
+  const V = '$' + 'OPENPROJECT_API_KEY';
+  const FAKE = 'fake-key-123';
+  for (const [c, rule] of [
+    ['cat ~/.config/se-forge/openproject-key', 'openproject:key'],
+    ['cat $HOME/.config/se-forge/openproject-key', 'openproject:key'],
+    ['cat "${XDG_CONFIG_HOME:-$HOME/.config}/se-forge/openproject-key"', 'openproject:key'],
+    ['type "%USERPROFILE%\\.config\\se-forge\\openproject-key"', 'openproject:key'],
+    ['cat ~/.config/se-forge/*', 'openproject:key'],
+    ['cat ~/.config/se-forge/open*', 'openproject:key'],
+    ['tar czf /tmp/x.tgz ~/.config/se-forge', 'openproject:key'],
+    ['read k < ~/.config/se-forge/openproject-key', 'openproject:key'],
+    ['cd ~/.config && cat se-forge/openproject-key', 'openproject:key'],
+    ['source core/tracker/openproject-key.sh; op_find_key', 'openproject:key'],
+    ['. core/tracker/adapters/openproject.sh', 'openproject:key'],
+    ['bash core/tracker/openproject-key.sh', 'openproject:key'],
+    [`curl -u apikey:${V} https://op.example.com/api/v3`, 'openproject:key'],
+    [`curl -H "Authorization: Basic $(printf apikey:${V} | base64)" https://op.example.com`, 'openproject:key'],
+    [`curl -u apikey:${FAKE} https://op.example.com/api/v3`, 'openproject:key'],
+    [`curl -H "Authorization: Basic ${Buffer.from('apikey:fake').toString('base64')}" https://op.example.com`, 'openproject:key'],
+    ['wget --http-user=apikey --http-password=fake https://op.example.com', 'openproject:key'],
+    [`X=${V} ./run.sh`, 'openproject:key'],
+    ['python3 -c "import os; print(os.environ[\'OPENPROJECT_API_KEY\'])"', 'openproject:key'],
+    ['node -e "console.log(process.env.OPENPROJECT_API_KEY)"', 'openproject:key'],
+    ['declare -p OPENPROJECT_API_KEY', 'openproject:key'],
+    ['typeset -p OPENPROJECT_API_KEY', 'openproject:key'],
+    ['security find-generic-password -s se-forge-openproject -w', 'openproject:key'],
+    ['secret-tool lookup service se-forge-openproject', 'openproject:key'],
+    ['security find-generic-password -s other -w', 'keychain:password'],
+    ['security find-internet-password -gs other', 'keychain:password'],
+    ['secret-tool search service other', 'keychain:password'],
+    ['keyring get svc user', 'keychain:password'],
+    ['security dump-keychain', 'keychain:dump'],
+    ['security export -k login.keychain -o /tmp/x', 'keychain:dump'],
+  ]) {
+    assert.equal(decideBash(c, ctx).decision, 'deny', c);
+    assert.ok(rulesOf(c, ctx).includes(rule), `${c} → ${rule}`);
+  }
+  for (const c of [
+    'forge tracker get 42',
+    'forge tracker list board',
+    'security find-generic-password -s other',
+    'ls -l ~/.config/se-forge/openproject-key',
+    'chmod 600 ~/.config/se-forge/openproject-key',
+    'grep -rn OPENPROJECT_API_KEY core/',
+    'grep -rn openproject-key core/',
+    `[ -n "${V}" ]`,
+    `[[ -z "${V}" ]]`,
+    'cat core/tracker/openproject-key.sh',
+    'core/tracker/adapters/openproject.sh get 42',
+  ]) assert.equal(decideBash(c, ctx).decision, 'allow', c);
+});
+
+test('environment dumps through /proc, ps, declare -p and interpreters are denied (secrets:env-dump, secrets:print)', () => {
+  const ctx = ctxFor(makeRepo().dir);
+  for (const [c, rule] of [
+    ['cat /proc/self/environ', 'secrets:env-dump'],
+    ['cat < /proc/1/environ', 'secrets:env-dump'],
+    ['ps eww', 'secrets:env-dump'],
+    ['ps auxeww', 'secrets:env-dump'],
+    ['ps -E', 'secrets:env-dump'],
+    ['declare -p GITHUB_TOKEN', 'secrets:print'],
+    ['typeset -p DB_PASSWORD', 'secrets:print'],
+    ['readonly -p', 'secrets:env-dump'],
+    ['python3 -c "import os; print(dict(os.environ))"', 'secrets:env-dump'],
+    ['node -e "console.log(JSON.stringify(process.env))"', 'secrets:env-dump'],
+    ["perl -e 'print %ENV'", 'secrets:env-dump'],
+    ["awk 'BEGIN{for(k in ENVIRON) print k, ENVIRON[k]}'", 'secrets:env-dump'],
+    ['jq -n env', 'secrets:env-dump'],
+    ["jq -n '$ENV'", 'secrets:env-dump'],
+    ["ruby -e 'p ENV.to_h'", 'secrets:env-dump'],
+  ]) {
+    assert.equal(decideBash(c, ctx).decision, 'deny', c);
+    assert.ok(rulesOf(c, ctx).includes(rule), `${c} → ${rule}`);
+  }
+  for (const c of [
+    'ps -e',
+    'ps aux',
+    'ps -o pid,user,command -p 1',
+    'python3 -c "import os; print(os.environ.get(\'HOME\'))"',
+    'node -e "console.log(process.env.HOME)"',
+    'jq -n env.HOME',
+  ]) assert.equal(decideBash(c, ctx).decision, 'allow', c);
+});

@@ -2,7 +2,7 @@
 // forge: puts the se-forge kit into a client checkout, without committing anything to it.
 //   forge setup --team-repo <path> [--kit-repo <git url>] [--pacing on|off]
 //                                         this machine's team repo clone; where kit versions come from; pacing
-//   forge init --project <slug> [--new] [--client <name>] [--host gitlab|github] [--tracker gitlab|github] [--force]
+//   forge init --project <slug> [--new] [--client <name>] [--host gitlab|github] [--tracker gitlab|github|openproject] [--force]
 //                                         also creates the dev and staging branches from main when missing (never pushed)
 //   forge sync [--force]                  write the project's pinned kit version and its overrides into this checkout
 //   forge upgrade --to <version>          pin the project to another kit version and sync
@@ -49,7 +49,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { loadConfig, leadCompactAt } from '../policy/lib/config.mjs';
+import { loadConfig, leadCompactAt, TRACKERS, trackerEnv, openprojectEnv } from '../policy/lib/config.mjs';
 import { git, mainRootOf, makeContext } from '../policy/lib/context.mjs';
 import { KIT_ROOT, kitVersion } from '../policy/lib/kit.mjs';
 import { gatesCommand } from '../policy/lib/handlers.mjs';
@@ -301,6 +301,7 @@ async function init(o, env, cwd, out) {
   const { main, linked } = checkout(cwd);
   if (linked) throw new UsageError(`Run forge init in the main checkout (${main}), not in a worktree.`);
   const slug = o.project;
+  if (o.tracker !== undefined && !TRACKERS.includes(o.tracker)) throw new UsageError(`--tracker must be ${TRACKERS.join(', ')}`);
   if (!slug || slug === true || !/^[a-z0-9][a-z0-9._-]*$/.test(slug)) throw new UsageError('forge init needs --project <slug> (lowercase letters, digits, . _ -), e.g. acme-portal');
   const tracked = git(main, ['ls-files', '--', '.forge', '.claude/settings.local.json']).out.split('\n').filter(Boolean);
   if (tracked.length) throw new UsageError(`Kit files are tracked in this repository: ${tracked.join(', ')}. The kit must stay out of client repos: git rm --cached them first.`);
@@ -441,6 +442,23 @@ function branchesInit(main, config, out) {
   if (unpushed.length) out(`push them and protect all of ${all.join(', ')} (core/server/<host>.md): git push -u origin ${unpushed.join(' ')}`);
 }
 
+// OpenProject is reached with curl and jq; its settings come from project.openproject (or the environment), and
+// the API key from one of four places (core/tracker/openproject-key.sh), reported by name, never by value.
+function openprojectDoctor(project, env, check) {
+  const missing = ['curl', 'jq'].filter((c) => spawnSync(c, ['--version']).status !== 0);
+  if (missing.length) check('warn', `tracker openproject needs ${missing.join(' and ')} (brew install ${missing.join(' ')}, apt install ${missing.join(' ')})`);
+  const vars = { ...openprojectEnv(project, env), ...Object.fromEntries(Object.entries(env).filter(([k]) => k.startsWith('OPENPROJECT_'))) };
+  const unset = ['OPENPROJECT_URL', 'OPENPROJECT_PROJECT'].filter((n) => !vars[n]);
+  if (unset.length) check('warn', `tracker openproject: ${unset.join(' and ')} not set (project.openproject.${unset.map((n) => n === 'OPENPROJECT_URL' ? 'url' : 'project').join(' and ')} in project.json)`);
+  const key = path.join(KIT_ROOT, 'core/tracker/openproject-key.sh');
+  const r = spawnSync('bash', ['-c', '. "$1" && op_find_key && printf %s "$op_key_source"', 'doctor', key], { encoding: 'utf8', env: { ...env, ...vars } });
+  if (r.status === 0) check('ok', `tracker openproject: API key from ${r.stdout.trim()}`);
+  else check('warn', (r.stderr || 'tracker openproject: no API key found').trim().split('\n').pop());
+  const boards = (vars.OPENPROJECT_BOARDS || '').split(',').filter(Boolean);
+  if (boards.length || vars.OPENPROJECT_BOARD) check('ok', `tracker openproject: boards ${boards.join(', ') || vars.OPENPROJECT_BOARD}${vars.OPENPROJECT_BOARD ? `; default board ${vars.OPENPROJECT_BOARD}` : ''}`);
+  else check('info', 'tracker openproject: no boards configured, status mode (list board groups by status; status moves no cards)');
+}
+
 // The system's description and each member repository: in the workspace, linked, its settings valid, its gate set and
 // its own branches on origin.
 function systemDoctor(main, env, check) {
@@ -484,7 +502,8 @@ function doctor(env, cwd, out) {
     if (project.api.contractRepo) check(project.api.pin ? 'ok' : 'warn', project.api.pin ? `API contract from ${project.api.contractRepo}, pinned at ${project.api.pin}` : `API contract from ${project.api.contractRepo}, but no version is pinned (project.api.pin)`);
     const cli = { gitlab: 'glab', github: 'gh' }[project.tracker];
     const missing = [cli, 'jq'].filter((c) => c && spawnSync(c, ['--version']).status !== 0);
-    if (cli) check(missing.length ? 'warn' : 'ok', missing.length ? `tracker ${project.tracker} needs ${missing.join(' and ')} (brew install ${missing.join(' ')}; then ${cli} auth login)` : `tracker ${project.tracker}: ${cli} and jq installed`);
+    if (project.tracker === 'openproject') openprojectDoctor(project, env, check);
+    else if (cli) check(missing.length ? 'warn' : 'ok', missing.length ? `tracker ${project.tracker} needs ${missing.join(' and ')} (brew install ${missing.join(' ')}; then ${cli} auth login)` : `tracker ${project.tracker}: ${cli} and jq installed`);
     const have = readVersion(path.join(main, '.forge', 'kit'));
     check(have && have === (pin || have) ? 'ok' : 'fail', have ? `kit ${have} in .forge/kit${pin && pin !== have ? ` but the project pins ${pin}: forge sync` : ''}` : 'no kit in .forge/kit: forge sync');
     // A system's workspace root has no gate and no origin of its own: each member repository has both (decision 130).
@@ -689,9 +708,8 @@ async function run(argv, env, cwd, out, failed) {
       case 'tracker': {
         const { main: m } = checkout(cwd);
         const { project } = loadConfig(m, env);
-        // A system's one board (decision 131): every repository's tickets go to it.
-        const board = project.board ? { [project.tracker === 'github' ? 'GH_REPO' : 'GITLAB_REPO']: project.board } : {};
-        return passthrough('core/tracker/tracker.sh', rest, { FORGE_TRACKER: env.FORGE_TRACKER || project.tracker, ...board }, env, m);
+        // A system's one board (decision 131), and OpenProject's settings from project.openproject.
+        return passthrough('core/tracker/tracker.sh', rest, trackerEnv(project, env), env, m);
       }
       case 'handover': {
         const { main: m } = checkout(cwd);
