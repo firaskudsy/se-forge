@@ -8,6 +8,8 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ## [Unreleased]
 
+## [0.2.39] - 2026-10-26
+
 ### Changed
 - **Auto mode works with the kit** (decision 141). The hooks turned every "ask first" into a refusal in auto mode, on
   the belief that nobody would see the prompt, so in auto mode, Claude Code's default since 2.1.283, every approval
