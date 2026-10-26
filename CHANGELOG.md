@@ -8,6 +8,8 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ## [Unreleased]
 
+## [0.2.37] - 2026-10-26
+
 ### Changed
 - **`forge dashboard` splits the tokens three ways:** under the Tokens total (and the API cost, when `project.prices`
   is set) the page shows what was **re-read** from the cache, what was **new** (input and cache writes) and the
