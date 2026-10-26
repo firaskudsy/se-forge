@@ -53,6 +53,7 @@ forge timeline 12 --csv      every line, for a spreadsheet (--json: one JSON obj
                         23m  permission: Bash git push -u origin feat/12-auth (11:02)
   agents            9 spawned · 2h 05m of agent time
                     backend-engineer ×4              1h 10m  sent back 2× by the gates
+                    and 12 of Claude Code's own helpers, which nobody spawned (no role, no transcript)
   gates             5 runs in 6m: 3 passed, 2 failed · 4 not ready: Uncommitted changes ×3, … has no upstream
   refused           9: models:tier ×3, gate:security ×2, output:heavy ×2, …
   failed calls      14: Bash npm run ×5, Bash git push ×2, Edit ×2 · 1 interrupted
@@ -73,7 +74,7 @@ forge timeline 12 --csv      every line, for a spreadsheet (--json: one JSON obj
 |---|---|---|
 | `tool.start`, `tool.done`, `tool.fail` | an agent's tool call starts, ends, fails | `tool`, `what` (the command, the file, the agent spawned), `ms` (the tool's own run time), `why` (the error), `interrupted`; on a spawn `askedModel` (a `model=` given) and, when it returns, `spawned` (the agent's id) and `agentModel` |
 | `tool.refused`, `tool.ask` | the kit refuses a call or asks you; Claude Code itself refuses one (`rule: permission`) | `rule`, `why` |
-| `agent.start`, `agent.stop`, `agent.sent-back`, `agent.gates-failed` | a lane starts, finishes, is sent back by the gates, gives up on them | `context` (its context size at the end) |
+| `agent.start`, `agent.stop`, `agent.sent-back`, `agent.gates-failed` | a lane starts, finishes, is sent back by the gates, gives up on them. A stop with no role, no start and no transcript is one of Claude Code's own helpers: no agent count includes it, and `forge timeline` names how many | `context` (its context size at the end) |
 | `gates.pass`, `gates.fail`, `gates.not-ready` | the gate command ran, or the check stopped before it (uncommitted changes, nothing pushed, no tests) | `by`, `ms`, `why` |
 | `prompt`, `agent.notify` | you send a message (only its length and a slash command's name); a background agent wakes the lead | `chars` |
 | `turn.end`, `turn.sent-back`, `turn.fail` | the lead stops and waits for you; the save reminder sends it back; an API error (rate limit, overload) | `why` |

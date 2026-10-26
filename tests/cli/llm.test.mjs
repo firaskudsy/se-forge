@@ -56,7 +56,7 @@ test('the probe says what is wrong: unreachable, the key refused, a model missin
   assert.match(rs[1].msg, /refused a tool call \(HTTP 404: The model `big` does not exist\.\)$/);
 });
 
-test('forge sync writes the server, a model for each alias, no attribution block and the key helper', () => {
+test('forge sync writes the server, a model for each alias, no attribution block, auto mode\'s own checks and the key helper', () => {
   const s = llmSettings('gpu', SERVER, '/work/app/.forge/kit');
   assert.deepEqual(s.env, {
     ANTHROPIC_BASE_URL: 'https://gpu.example.com/llm',
@@ -66,6 +66,7 @@ test('forge sync writes the server, a model for each alias, no attribution block
     ANTHROPIC_DEFAULT_HAIKU_MODEL: 'small',
     ANTHROPIC_DEFAULT_FABLE_MODEL: 'big',
     CLAUDE_CODE_ATTRIBUTION_HEADER: '0',
+    CLAUDE_CODE_AUTO_MODE_SERVER: '0',
   });
   assert.equal(s.apiKeyHelper, 'node "/work/app/.forge/kit/core/cli/llm-key.mjs" gpu');
   assert.equal(modelsText({ opus: 'q', sonnet: 'q', haiku: 'q' }), 'q for opus, sonnet and haiku');

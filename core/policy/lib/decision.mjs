@@ -20,6 +20,7 @@ export function explain(result) {
     .join('\n');
 }
 
-// Asks only count as a human decision when a person can be prompted. In bypass and auto
-// modes an ask could be resolved without anyone looking, so gated asks become denials there.
-export const HUMAN_MODES = new Set(['default', 'acceptEdits', 'plan', 'manual']);
+// Asks only count as a human decision when a person can be prompted. Auto mode is one (decision 141): a hook's ask
+// still prompts there, and its classifier can deny the call but never approve it silently. In bypassPermissions and
+// dontAsk nobody is asked, so gated asks become denials there.
+export const HUMAN_MODES = new Set(['default', 'acceptEdits', 'plan', 'manual', 'auto']);

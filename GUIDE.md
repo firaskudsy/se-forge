@@ -368,7 +368,7 @@ closes. Claude Code asks you before anything risky: answer each question. Everyt
 session too; you don't need to click anything in GitLab during the build.
 
 How a run behaves, so nothing surprises you:
-- **Start Claude Code in its normal permission mode, not auto.** In auto mode nobody can approve, so every approval (a security plan, an architecture change, a new library) is refused and the ticket stalls.
+- **Auto mode is fine** (decision 141): routine steps run without a prompt, and what the kit needs a person for (a security plan, an architecture change, a new library) still asks you and counts as your approval. Only `dontAsk` and `bypassPermissions` refuse those, as nobody is asked there; in them the ticket stalls.
 - **Finished tickets close by themselves:** after the reviews and QA pass, `forge merge` merges the ticket into `dev` and moves it to **Done**, which closes the issue. Work with no branch of its own (only the team repo changed) closes once its reviews approve; without an approving review you're asked once in the terminal. You check the app when you merge `dev` into `staging` and `main`; if something doesn't work, tell the lead and it files a `[Bug]`.
 - **Follow-ups:** a reviewer's finding that is not a blocker is fixed in the same ticket when it is in that ticket's code. Anything else becomes a `[Follow-up]` issue. Once the build's own tickets are merged, the follow-ups the project manager rates P1 or P2 and the decision register covers join by themselves, in one round. The rest (P3, new scope, fixes to the kit itself) wait for you: the progress report lists them in one line, and only those you name in the session ("take #23 and #26") join. A follow-up's own review never files more follow-ups, so the build ends.
 - **Every ticket has limits** (decision 127): at most 4 engineer lanes, 2 review rounds with blockers and 2 QA fails. A ticket that reaches one is parked (Blocked, with the reason) and the agents go on with the next; the progress report tells you. `forge limits` shows what each open ticket has used. To let a parked ticket go on, run `forge limits lift 12` in a terminal (or `! forge limits lift 12` in the session): it gets one more allowance of each. Agents cannot lift a limit. A project changes the numbers in `project.json` (`policy.limits`).
@@ -721,7 +721,9 @@ forge llm use qwen
 ```
 `forge sync` then writes into `.claude/settings.local.json` (local, never committed): the address, the server's
 model for each alias and for the session itself, `CLAUDE_CODE_ATTRIBUTION_HEADER=0` (Anthropic's API strips that
-block; another server reads it as part of the prompt and of its cache key), and a key helper. Claude Code runs
+block; another server reads it as part of the prompt and of its cache key), `CLAUDE_CODE_AUTO_MODE_SERVER=0` (only
+Anthropic's API makes auto mode's checks itself; without it, auto mode stops the session on a notice about them),
+and a key helper. Claude Code runs
 `node .forge/kit/core/cli/llm-key.mjs qwen` for the key, so the key is in no file the agents work in. Start a new
 Claude Code session and `/resume`; `/status` shows the server's address. `forge llm use claude` switches back the
 same way. If you set `apiKeyHelper` or one of those variables in that file yourself, `use` refuses rather than
@@ -734,6 +736,8 @@ overwrite them.
   the model to `project.prices` under its full name (`"Qwen/Qwen3.8-27B": { … }`), at zero or what it costs you.
 - A server may not report cache hits: the dashboard then counts every token as new.
 - One session talks to one server, so every tier runs there.
+- In auto mode the check that lets routine steps run without a prompt is made by the server's model, not Claude's.
+  The kit's own refusals and approvals do not depend on the model.
 - Remote Control and voice dictation are off while Claude Code uses a key helper.
 - Agents never read the key (`[llm:key]`, `[keychain:password]`) and never choose the server (`[llm:person]`): a
   person runs `forge llm use`, in a terminal or with `!` in the session.

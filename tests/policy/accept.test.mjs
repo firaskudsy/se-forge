@@ -64,13 +64,15 @@ test('a ticket whose branch never passed the gates stays refused, merged or not'
   assert.match(r.reason, /The gates have not passed on feat\/1-login/);
 });
 
-test('a ticket with no branch asks the person; an agent and auto mode are refused', () => {
+test('a ticket with no branch asks the person, in auto mode too; an agent is refused', () => {
   const dir = repoWithTicket();
   let r = pre(dir, 'forge tracker status 24 "In Testing" --comment "Team-repo work"');
   assert.equal(r.decision, 'ask', r.reason);
   assert.match(r.reason, /#24 has no branch in this repository/);
   r = pre(dir, 'forge tracker status 24 "In Testing"', { permission_mode: 'auto' });
-  assert.equal(r.decision, 'deny', 'nobody can approve in auto mode');
+  assert.equal(r.decision, 'ask', 'auto mode prompts for a hook\'s ask (decision 141)');
+  r = pre(dir, 'forge tracker status 24 "In Testing"', { permission_mode: 'dontAsk' });
+  assert.equal(r.decision, 'deny', 'nobody can approve in dontAsk mode');
   r = pre(dir, 'forge tracker status 24 Done', { agent_id: 'q1', agent_type: 'qa-engineer' });
   assert.equal(r.decision, 'deny', 'an agent never gets the question');
 });

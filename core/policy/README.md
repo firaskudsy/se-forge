@@ -42,7 +42,7 @@ Every Bash command is parsed (`lib/shell.mjs`) into the simple commands that act
 | mcp (`mcp.mjs`) | any MCP tool but Figma's (`project.figma.toolPrefix`) and the prefixes in `mcp.allow`, and reading another server's resources: the rules cannot see what an MCP call does | |
 | roles (`roles.mjs`) | read-only roles (reviewers, scout) writing anything but their report; docs-only roles (planner, analysts, designer, tracker clerk) writing outside `.forge/`; either running anything but inspection and `forge` commands | |
 
-**Approvals.** An ask resolved by a person in `default`, `acceptEdits` or `plan` mode is recorded per branch for the security gate (`.forge/state/approvals.json`). In `bypassPermissions`, `dontAsk` and `auto` modes asks become denials, because nobody may see them.
+**Approvals.** An ask resolved by a person in `default`, `acceptEdits`, `plan` or `auto` mode is recorded per branch for the security gate (`.forge/state/approvals.json`): a hook's ask still prompts in auto mode, and its classifier can deny the call but never approve it (decision 141). In `bypassPermissions` and `dontAsk` modes asks become denials, because nobody is asked.
 
 **Auto-approval.** A Bash call made only of the project's own commands (the gate commands, `commands.allow`), output redirected to `/tmp`, and `tail`/`grep`-style plumbing is approved without a prompt, so unattended lanes can run the gates even before a folder is trusted. It applies only when no rule objected; settings deny and ask rules still apply.
 

@@ -31,7 +31,12 @@ export function readTimeline(stateDir, { imported = true } = {}) {
       try { const e = JSON.parse(l); if (Number.isFinite(T(e))) lines.push(e); } catch { /* a cut line */ }
     }
   }
-  return { files, lines: lines.sort((a, b) => T(a) - T(b)) };
+  lines.sort((a, b) => T(a) - T(b));
+  // Claude Code's own short helpers report a stop with no role, no start and no transcript: nobody spawned them, so
+  // the agent counts leave them out (helper: true; forge timeline counts them apart).
+  const started = new Set(lines.filter((e) => e.event === 'agent.start').map((e) => e.agent));
+  const typed = new Set(lines.filter((e) => e.agent && e.who !== 'agent').map((e) => e.agent));
+  return { files, lines: lines.map((e) => (e.agent && !started.has(e.agent) && !typed.has(e.agent) ? { ...e, helper: true } : e)) };
 }
 
 // Each agent's lines take the ticket its spawn named; the agent's own branch can still be the lead's.
@@ -73,7 +78,7 @@ const reasonKey = (why) => String(why || 'unknown').replace(/\([^)]*\)/g, '').sp
 export function summarize(lines, prices = {}) {
   const s = {
     from: lines.length ? T(lines[0]) : 0, to: lines.length ? T(lines.at(-1)) : 0,
-    waits: [], agents: new Map(), spawns: 0, refused: new Map(), asks: 0,
+    waits: [], agents: new Map(), helpers: new Set(), spawns: 0, refused: new Map(), asks: 0,
     gates: { pass: 0, fail: 0, ms: 0, notReady: new Map() }, failed: new Map(), interrupted: 0,
     apiErrors: new Map(), compactions: { lead: 0, agents: 0 }, slowest: [],
     tokens: { total: 0, byModel: new Map(), byWho: new Map(), cost: 0, unpriced: new Set(), steps: [] },
@@ -104,6 +109,7 @@ export function summarize(lines, prices = {}) {
   const starts = new Map();
   const agents = new Map();
   for (const e of lines) {
+    if (e.helper) { s.helpers.add(e.agent); continue; }
     switch (e.event) {
       case 'tool.start':
       case 'tool.ask':
@@ -178,13 +184,14 @@ export function render(title, s) {
     row('waiting for you', `${duration(s.waits.reduce((a, w) => a + w.ms, 0))} in ${s.waits.length} wait${s.waits.length > 1 ? 's' : ''}`);
     for (const w of s.waits.slice(0, 5)) more(`${duration(w.ms).padStart(7)}  ${w.what} (${clock(w.at)})`);
   }
-  if (s.agents.size) {
+  if (s.agents.size || s.helpers.size) {
     const ms = [...s.agents.values()].reduce((a, t) => a + t.ms, 0);
     row('agents', `${s.spawns} spawned · ${duration(ms)} of agent time`);
     for (const [type, t] of [...s.agents.entries()].sort((a, b) => b[1].ms - a[1].ms)) {
       const notes = [t.sentBack && `sent back ${t.sentBack}× by the gates`, t.gatesFailed && `${t.gatesFailed} stopped with failing gates`, t.open && `${t.open} running or cut off`].filter(Boolean);
       more(`${`${type} ×${t.n}`.padEnd(26)} ${duration(t.ms).padStart(7)}${notes.length ? `  ${notes.join(', ')}` : ''}`);
     }
+    if (s.helpers.size) more(`and ${s.helpers.size} of Claude Code's own helpers, which nobody spawned (no role, no transcript)`);
   }
   const runs = s.gates.pass + s.gates.fail;
   if (runs || s.gates.notReady.size) {

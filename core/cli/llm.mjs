@@ -29,11 +29,12 @@ export function modelsText(models) {
 
 // What forge sync writes into .claude/settings.local.json for a server: its address, its model for each alias (the
 // session's own model is the opus one, as the lead's is), no attribution block (Anthropic's API strips it, another
-// server reads it as part of the prompt and of its cache key), and the key helper.
+// server reads it as part of the prompt and of its cache key), auto mode's checks made by Claude Code itself (only
+// Anthropic's API makes them server-side; without this, auto mode holds the session on a notice), and the key helper.
 export function llmSettings(name, server, kitDir) {
   const m = server.models;
   return {
-    env: { ANTHROPIC_BASE_URL: server.url, ANTHROPIC_MODEL: m.opus, ANTHROPIC_DEFAULT_OPUS_MODEL: m.opus, ANTHROPIC_DEFAULT_SONNET_MODEL: m.sonnet, ANTHROPIC_DEFAULT_HAIKU_MODEL: m.haiku, ANTHROPIC_DEFAULT_FABLE_MODEL: m.opus, CLAUDE_CODE_ATTRIBUTION_HEADER: '0' },
+    env: { ANTHROPIC_BASE_URL: server.url, ANTHROPIC_MODEL: m.opus, ANTHROPIC_DEFAULT_OPUS_MODEL: m.opus, ANTHROPIC_DEFAULT_SONNET_MODEL: m.sonnet, ANTHROPIC_DEFAULT_HAIKU_MODEL: m.haiku, ANTHROPIC_DEFAULT_FABLE_MODEL: m.opus, CLAUDE_CODE_ATTRIBUTION_HEADER: '0', CLAUDE_CODE_AUTO_MODE_SERVER: '0' },
     apiKeyHelper: `node "${path.join(kitDir, 'core', 'cli', 'llm-key.mjs')}" ${name}`,
   };
 }

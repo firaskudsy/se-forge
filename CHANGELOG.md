@@ -8,6 +8,21 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ## [Unreleased]
 
+### Changed
+- **Auto mode works with the kit** (decision 141). The hooks turned every "ask first" into a refusal in auto mode, on
+  the belief that nobody would see the prompt, so in auto mode, Claude Code's default since 2.1.283, every approval
+  the kit needs was refused and its ticket stalled. A hook's ask still prompts in auto mode, and the classifier can
+  deny the call but never approve it silently: auto mode now asks, like the other modes a person watches, and the
+  person's approval is recorded for the gates. `dontAsk` and `bypassPermissions` still refuse, as nobody is asked
+  there. The cheat sheet and GUIDE.md no longer warn against auto mode.
+- `forge llm use` also writes `CLAUDE_CODE_AUTO_MODE_SERVER=0`: only Anthropic's API makes auto mode's checks
+  itself, and without it auto mode holds the session on a notice about them.
+
+### Fixed
+- `forge timeline` listed Claude Code's own short helpers, which report a stop with no role, no start and no
+  transcript, as hundreds of agents "running or cut off" (`agent ×447`). They are counted apart now ("and 451 of
+  Claude Code's own helpers, which nobody spawned"), and the dashboard leaves them out of every agent count.
+
 ## [0.2.38] - 2026-10-26
 
 ### Added

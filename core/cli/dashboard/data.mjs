@@ -163,7 +163,9 @@ export function projectData({ main, folder, teamRoot, base, stateDir, repos = nu
       if (!merges.has(num) || at < merges.get(num)) { merges.set(num, at); mergedIn.set(num, r.name); }
     }
   }
-  const lines = attribute(readTimeline(stateDir).lines).map((e) => {
+  // Claude Code's own helpers are no one's agents (forge timeline counts them apart); they leave no transcript, so no
+  // reply of theirs is on a line.
+  const lines = attribute(readTimeline(stateDir).lines.filter((e) => !e.helper)).map((e) => {
     if (!e.who) return e;
     const who = role(e.who);
     return OVERHEAD.has(who) ? { ...e, who, ticket: undefined } : who === e.who ? e : { ...e, who };

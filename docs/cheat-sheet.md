@@ -50,7 +50,7 @@ forge doctor                                     # ✓ everywhere
 Protect its branches in GitLab: default branch `dev`; nobody pushes to `dev`, `staging` or `main`; `api-v*` tags by
 Maintainers; pipelines must succeed (GUIDE.md, C3).
 
-**5. Plan and build.** Start Claude Code in its normal permission mode, not auto (in auto every approval is refused).
+**5. Plan and build.** Start Claude Code. Auto mode, its default, is fine: routine steps run without prompts, and what the kit needs you to approve still asks you.
 ```
 mkdir -p .forge/project/bootstrap/inputs
 cp ~/Downloads/demo-app-requirements.pdf .forge/project/bootstrap/inputs/

@@ -100,6 +100,18 @@ test('forge timeline: a ticket, the last days, --json and --csv', () => {
   assert.match(out[0], /No timeline yet/);
 });
 
+test('Claude Code\'s own helpers (a stop with no role, no start, no transcript) are not counted as agents', () => {
+  const helpers = [0, 1, 2].map((i) => ({ at: at(20 + i), event: 'agent.stop', who: 'agent', agent: `h${i}`, branch: 'dev' }));
+  const dir = stateWith([...LINES, ...helpers, { at: at(30), event: 'agent.start', agent: 'u1', who: 'agent' }, { at: at(31), event: 'agent.stop', agent: 'u1', who: 'agent' }]);
+  const out = [];
+  timeline({}, { stateDir: path.join(dir, '.forge/state'), out: (s) => out.push(s), now: T0 + 3600000 });
+  const week = out.join('\n').split('\n\n')[0];
+  assert.match(week, /\n {20}backend-engineer ×1 /);
+  assert.match(week, /\n {20}agent ×1 /, 'an agent with a start but no role is still an agent');
+  assert.match(week, /\n {20}and 3 of Claude Code's own helpers, which nobody spawned \(no role, no transcript\)/);
+  assert.doesNotMatch(week, /running or cut off/);
+});
+
 test('a forge command you run in a terminal goes into the timeline; one an agent runs is already there', () => {
   const { dir } = makeRepo();
   const env = { ...process.env, CLAUDE_PROJECT_DIR: dir };

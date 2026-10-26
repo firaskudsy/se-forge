@@ -37,10 +37,11 @@ test('fails closed on unreadable input', () => {
   assert.match(r.err, /blocking this call/);
 });
 
-test('asks become denials when no human can be asked', () => {
+test('asks become denials when no human can be asked; auto mode still asks (decision 141)', () => {
   const { dir } = makeRepo();
   assert.equal(decision(pre(dir, 'Bash', { command: 'npm i zod' })), 'ask');
-  for (const mode of ['bypassPermissions', 'dontAsk', 'auto']) {
+  assert.equal(decision(pre(dir, 'Bash', { command: 'npm i zod' }, { permission_mode: 'auto' })), 'ask', 'a hook\'s ask prompts in auto mode too');
+  for (const mode of ['bypassPermissions', 'dontAsk']) {
     const r = pre(dir, 'Bash', { command: 'npm i zod' }, { permission_mode: mode });
     assert.equal(decision(r), 'deny', mode);
     assert.match(r.out.hookSpecificOutput.permissionDecisionReason, new RegExp(`cannot be given in ${mode} mode`));
@@ -65,6 +66,14 @@ test('a human approval of a gated edit is recorded, in human modes only', () => 
   assert.equal(decision(pre(dir, 'Edit', edit)), 'allow');
   const approvals = JSON.parse(fs.readFileSync(path.join(dir, '.forge/state/approvals.json'), 'utf8'));
   assert.deepEqual(approvals['feat/1-login'].gates, ['security']);
+});
+
+test('in auto mode the person approves a gated edit, and it is recorded (decision 141)', () => {
+  const { dir } = makeRepo();
+  const edit = { file_path: path.join(dir, 'src/auth/login.ts'), old_string: 'export', new_string: 'export ' };
+  assert.equal(decision(pre(dir, 'Edit', edit, { permission_mode: 'auto' })), 'ask');
+  hook('post-tool-use', { hook_event_name: 'PostToolUse', cwd: dir, permission_mode: 'auto', tool_name: 'Edit', tool_input: edit }, dir);
+  assert.equal(decision(pre(dir, 'Edit', edit, { permission_mode: 'auto' })), 'allow');
 });
 
 test('spawning an engineer on a security-gated plan asks once per branch', () => {

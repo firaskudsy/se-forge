@@ -75,7 +75,7 @@ test('a lane naming no ticket asks; the plan its prompt names counts as its tick
   let r = pre(p.dir, { subagent_type: 'frontend-engineer', description: 'quick fix', prompt: 'Change the button colour.' });
   assert.equal(r.decision, 'ask');
   assert.match(r.reason, /\[ticket:none\] This frontend-engineer lane names no ticket/);
-  assert.equal(pre(p.dir, { subagent_type: 'frontend-engineer', description: 'quick fix', prompt: 'Change it.' }, { permission_mode: 'auto' }).decision, 'deny', 'nobody to ask in auto mode');
+  assert.equal(pre(p.dir, { subagent_type: 'frontend-engineer', description: 'quick fix', prompt: 'Change it.' }, { permission_mode: 'bypassPermissions' }).decision, 'deny', 'nobody to ask in bypassPermissions mode');
   r = pre(p.dir, { subagent_type: 'frontend-engineer', description: 'UI lane', prompt: 'Implement /x/.forge/project/plans/12-book.md exactly.' });
   assert.equal(r.decision, 'deny', 'plans/12-book.md: ticket #12, at its limit');
 });
