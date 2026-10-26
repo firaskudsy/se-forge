@@ -108,12 +108,13 @@ const panel = (id, body) => `<section class="panel" id="tab-${id}" role="tabpane
 const card = (n, title, question, body) => `<section class="card"><h2><span class="num">${n}</span>${esc(title)}</h2><p class="q">${esc(question)}</p>${body}</section>`;
 
 // The kit version this checkout runs (.forge/kit: its hooks, agents and skills), with the project's pin and
-// this forge command when they differ. forge dashboard --text prints the same words.
+// this forge command when they differ, and the model server it runs on instead of Claude (forge llm, decision 140).
+// forge dashboard --text prints the same words.
 export function kitText(k) {
   if (!k?.active) return k?.pinned ? `no kit in this checkout, the project pins se-forge ${k.pinned}: forge sync` : '';
   const pin = k.pinned && k.pinned !== k.active ? `, but the project pins ${k.pinned}: forge sync` : '';
   const cli = k.cli && k.cli !== k.active ? ` (the forge command is ${k.cli})` : '';
-  return `se-forge ${k.active}${pin}${cli}`;
+  return `se-forge ${k.active}${pin}${cli}${k.llm ? `, on the model server ${k.llm}` : ''}`;
 }
 
 // The token kinds in three groups: what each reply re-reads from the cache (the conversation so far, sent again),

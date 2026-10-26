@@ -155,3 +155,22 @@ test('the OpenProject key file and process environments are closed to the file t
   assert.equal(run('Read', { file_path: p('core/tracker/openproject-key.sh') }).decision, 'allow', 'the script that finds the key is code, not the key');
   assert.equal(isSecretPath(key, ctxFor(dir).config, '/Users/dev'), true, 'git add and writes treat the key file as a secret');
 });
+
+test('a model server\'s key file is closed to the file tools (llm:key, decision 140)', () => {
+  const key = '/Users/dev/.config/se-forge/llm-qwen-key';
+  const run = (tool, input) => combine(checkFileTool({ tool_name: tool, tool_input: input }, ctxFor(dir)));
+  for (const [tool, input] of [
+    ['Read', { file_path: key }],
+    ['Read', { file_path: '~/.config/se-forge/llm-qwen-key' }],
+    ['Grep', { pattern: '.', path: key }],
+    ['Grep', { pattern: '.', path: '/Users/dev', glob: '**/llm-*-key' }],
+    ['Edit', { file_path: key, old_string: 'a', new_string: 'b' }],
+    ['Write', { file_path: key, content: 'fake-key-123' }],
+  ]) {
+    const r = run(tool, input);
+    assert.equal(r.decision, 'deny', `${tool} ${JSON.stringify(input)}`);
+    assert.deepEqual(r.findings.map((f) => f.rule), ['llm:key'], `${tool} ${JSON.stringify(input)}`);
+  }
+  assert.equal(run('Read', { file_path: p('core/cli/llm-key.mjs') }).decision, 'allow', 'the script that finds the key is code, not the key');
+  assert.equal(isSecretPath(key, ctxFor(dir).config, '/Users/dev'), true, 'git add and writes treat the key file as a secret');
+});

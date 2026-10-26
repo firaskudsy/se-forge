@@ -4,7 +4,7 @@ import { parseShell } from './shell.mjs';
 import { contextAt } from './context.mjs';
 import { checkMemberGit } from './rules/system.mjs';
 import { checkGit } from './rules/git.mjs';
-import { checkGh, checkGlab, checkForgeMerge, checkForgeNew, checkForgeLimits, checkForgeLane } from './rules/hosts.mjs';
+import { checkGh, checkGlab, checkForgeMerge, checkForgeNew, checkForgeLimits, checkForgeLane, checkForgeLlm } from './rules/hosts.mjs';
 import { checkSecrets, checkDownloadAndRun } from './rules/secrets.mjs';
 import { checkKeys } from './rules/keys.mjs';
 import { checkOps } from './rules/ops.mjs';
@@ -185,6 +185,7 @@ export function checkBash(command, session) {
     findings.push(...checkForgeMerge(c, a0, ctx));
     findings.push(...checkForgeNew(c, a0, ctx));
     findings.push(...checkForgeLimits(c, a0));
+    findings.push(...checkForgeLlm(c, a0));
     findings.push(...checkForgeLane(c, a0, ctx));
     findings.push(...checkOps(c, a0, ctx));
     findings.push(...checkOutput(cmds, i, ctx));

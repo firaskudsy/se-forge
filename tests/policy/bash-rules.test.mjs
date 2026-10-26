@@ -359,6 +359,42 @@ test('the OpenProject key never reaches an agent; keyring passwords and keychain
   ]) assert.equal(decideBash(c, ctx).decision, 'allow', c);
 });
 
+test('a model server\'s key never reaches an agent, and only a person picks the server (llm:key, llm:person; decision 140)', () => {
+  const ctx = ctxFor(makeRepo().dir);
+  for (const [c, rule] of [
+    ['cat ~/.config/se-forge/llm-qwen-key', 'llm:key'],
+    ['cat $HOME/.config/se-forge/llm-qwen-key', 'llm:key'],
+    ['cat "${XDG_CONFIG_HOME:-$HOME/.config}/se-forge/llm-qwen-key"', 'llm:key'],
+    ['type "%USERPROFILE%\\.config\\se-forge\\llm-qwen-key"', 'llm:key'],
+    ['cat ~/.config/se-forge/llm-*', 'llm:key'],
+    ['cat ~/.config/se-forge/*-key', 'llm:key'],
+    ['head -1 ~/.config/se-forge/llm-qwen-key | pbcopy', 'llm:key'],
+    ['read k < ~/.config/se-forge/llm-qwen-key', 'llm:key'],
+    ['cd ~/.config && cat se-forge/llm-qwen-key', 'llm:key'],
+    ['node .forge/kit/core/cli/llm-key.mjs qwen', 'llm:key'],
+    ['.forge/kit/core/cli/llm-key.mjs qwen', 'llm:key'],
+    ['node -e "import(\'./.forge/kit/core/cli/llm-key.mjs\').then((m) => console.log(m.findKey(\'qwen\')))"', 'llm:key'],
+    ['security find-generic-password -s se-forge-llm-qwen -w', 'llm:key'],
+    ['secret-tool lookup service se-forge-llm-qwen', 'llm:key'],
+    ['forge llm use qwen', 'llm:person'],
+    ['forge llm use claude', 'llm:person'],
+    ['forge llm add qwen --url https://gpu.example.com --model m', 'llm:person'],
+    ['forge llm remove qwen', 'llm:person'],
+  ]) {
+    assert.equal(decideBash(c, ctx).decision, 'deny', c);
+    assert.ok(rulesOf(c, ctx).includes(rule), `${c} → ${rule}`);
+  }
+  for (const c of [
+    'forge llm',
+    'ls -l ~/.config/se-forge/llm-qwen-key',
+    'chmod 600 ~/.config/se-forge/llm-qwen-key',
+    'cat core/cli/llm-key.mjs',
+    'grep -rn llm-key core/',
+    'sed -n 1,20p core/cli/llm-key.mjs',
+    'cat docs/llm.md',
+  ]) assert.equal(decideBash(c, ctx).decision, 'allow', c);
+});
+
 test('environment dumps through /proc, ps, declare -p and interpreters are denied (secrets:env-dump, secrets:print)', () => {
   const ctx = ctxFor(makeRepo().dir);
   for (const [c, rule] of [

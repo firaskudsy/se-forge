@@ -77,6 +77,13 @@ export function checkForgeLimits(c, a0) {
   return [deny('limits:lift', 'Only a person lifts a ticket\'s limit (decision 127): park the ticket and tell the owner. The owner runs forge limits lift <ticket> in a terminal, or types ! forge limits lift <ticket> in this session.')];
 }
 
+// forge llm add, use and remove (decision 140) are a person's: which server the agents run on, and with whose key, is
+// the owner's choice. The list (forge llm) is anyone's; it names where keys are, never a key.
+export function checkForgeLlm(c, a0) {
+  if (a0 !== 'forge' || c.argv[1] !== 'llm' || !['add', 'use', 'remove'].includes(c.argv[2])) return [];
+  return [deny('llm:person', 'Only a person chooses the model server (forge llm, decision 140). Ask the owner; they run forge llm use <name> (or claude) in a terminal, or type ! forge llm use <name> in this session.')];
+}
+
 // forge new (decision 79) writes a whole skeleton, its Dockerfiles and its CI at once: the lead asks a person
 // first (CI and image changes ask one by one otherwise); lanes never start a project.
 export function checkForgeNew(c, a0, ctx) {

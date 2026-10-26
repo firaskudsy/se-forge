@@ -245,6 +245,7 @@ In a terminal (`forge help` for every option; one page for the team: [docs/cheat
 | `forge shot <image> "<what>"` | Keep a picture of the app for the dashboard |
 | `forge system check \| init`, `forge lane open \| close` | An existing system: its description, its workspace, an agent's worktree in a member repository |
 | `forge worktrees`, `forge handover <name>`, `forge pacing` | The agents' worktrees; a handover; the subscription's usage |
+| `forge llm [add \| use <name> \| remove]` | Run a checkout's agents on a self-hosted model server instead of Claude (GUIDE.md, H) |
 
 ## Measure and improve
 

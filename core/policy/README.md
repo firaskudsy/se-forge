@@ -26,19 +26,19 @@ Every Bash command is parsed (`lib/shell.mjs`) into the simple commands that act
 | Area | Deny | Ask first |
 |---|---|---|
 | git (`rules/git.mjs`) | push to protected branches (any refspec form), force push (`-f`, `+ref`, lease), `--mirror`, `--all`, `--prune`, `ci.skip`, `--no-verify`/`commit -n`, `core.hooksPath` changes, `git add .`/`-A`/`-u`, `commit -a`, deleting or moving protected branches | creating, moving or deleting an `api-v*` tag, `reset --hard`, `clean -f`, `checkout -- .`, `restore`, `stash drop`, `branch -D`, `worktree remove --force`, pushing tags, `add -f`, history rewrites, `rm -r` |
-| hosts (`rules/hosts.mjs`) | merge, approve, secrets and variables, repo settings, printing tokens, API calls to merge/approval/protection/secret endpoints | releases, workflow and pipeline runs, other changing API calls |
+| hosts (`rules/hosts.mjs`) | merge, approve, secrets and variables, repo settings, printing tokens, API calls to merge/approval/protection/secret endpoints; `forge limits lift` and `forge llm add`/`use`/`remove`, which are a person's | releases, workflow and pipeline runs, other changing API calls |
 | secrets (`rules/secrets.mjs`) | any command naming a secret file (except `ls`, `stat` and the like), secret names in interpreter code, env dumps (also `/proc/*/environ`, `ps e`/`-E`, `declare -p`, interpreters dumping the environment), printing secret variables, `curl \| sh`, `docker compose config` | |
-| keys (`rules/keys.mjs`) | the OpenProject key file, the key script, `OPENPROJECT_API_KEY` references, keyring password prints for any service, keychain dumps | |
+| keys (`rules/keys.mjs`) | the OpenProject key file, the key script, `OPENPROJECT_API_KEY` references; a model server's key file and running its key helper (`llm-key.mjs`, decision 140); keyring password prints for any service, keychain dumps | |
 | ops (`rules/ops.mjs`) | `terraform apply`/`destroy`/state, `DROP`/`TRUNCATE`, `prisma migrate reset`, production targets, credential-printing cloud commands | dependency changes, hosts outside `network.allowHosts`, non-local databases, ssh/scp/rsync writes, kubectl/helm changes, cloud changes, deploy tools and deploy scripts, docker remote/push/volume deletes, deleting repo folders |
 | writes (`rules/targets.mjs`, shared by Bash writers and file tools) | hooks, settings, approvals state, `.git/`, secrets, Terraform state, lock files, generated code, protected documents, migrations already on main | CI files, ADRs, agent config and the project's kit overrides, the policy config, `.gitleaksignore`/`.gitleaks.toml`, security-sensitive paths and the API contract's spec (each once per branch, see approvals) |
-| files (`files.mjs`) | Read/Grep of secrets and the OpenProject key file; writes to it | manifest edits that change dependencies |
+| files (`files.mjs`) | Read/Grep of secrets, the OpenProject key file and a model server's key file; writes to them | manifest edits that change dependencies |
 | lanes (`lanes.mjs`) | sub-agents from lanes; any call but handing over past `budget.block`; an engineer lane past 25 calls with no edit | |
 | done (`gates.mjs`) | ready PR/MR, done ticket status, or an engineer lane finishing, unless the gates passed on that commit | |
 | models (`handlers.mjs`) | spawning an engineer (`budget.engineers`) with a `model` other than the one forge sync rendered for it: implementation stays on its tier (decision 94) | |
 | contract (`handlers.mjs`) | spawning `backend-engineer`, `frontend-engineer` or `mobile-engineer` on a plan whose `Contract:` is pending or names a version that is neither an `api-v` tag here nor `project.api.pin` | |
 | output (`rules/output.mjs`) | heavy test/build commands without redirect, filter or quiet flag | |
 | commit scan (`scan.mjs`) | a `git commit` that would add a secret, including files staged by the same command (gitleaks when installed, else built-in patterns) | |
-| pacing (`pacing.mjs`) | the lead spawning agents while the plan's usage is red (only with pacing on; see the `pacing` skill) | |
+| pacing (`pacing.mjs`) | the lead spawning agents while the plan's usage is red (only with pacing on, and never on a self-hosted model server; see the `pacing` skill) | |
 | mcp (`mcp.mjs`) | any MCP tool but Figma's (`project.figma.toolPrefix`) and the prefixes in `mcp.allow`, and reading another server's resources: the rules cannot see what an MCP call does | |
 | roles (`roles.mjs`) | read-only roles (reviewers, scout) writing anything but their report; docs-only roles (planner, analysts, designer, tracker clerk) writing outside `.forge/`; either running anything but inspection and `forge` commands | |
 

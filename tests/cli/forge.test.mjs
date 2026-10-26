@@ -2,7 +2,7 @@
 // a team repo with a bare "origin", a kit repo with version tags, and an isolated user config and cache.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -518,4 +518,134 @@ test('project.models picks the model per tier for this project only', () => {
   const r = w.forge(['sync']);
   assert.equal(r.code, 2);
   assert.match(r.out, /project\.json is invalid, nothing written:\n {2}project\.models\.deep must be a model name/);
+});
+
+// forge llm (decision 140): a fake model server in its own process (forge runs with spawnSync), the key in a private
+// file under XDG_CONFIG_HOME, and no Keychain or Secret Service on the PATH.
+async function fakeServer(env = {}) {
+  const child = spawn('node', [path.join(KIT, 'tests/cli/fixtures/fake-llm-server.mjs')], { env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'inherit'] });
+  const port = await new Promise((resolve) => child.stdout.once('data', (d) => resolve(Number(String(d).trim()))));
+  return { url: `http://127.0.0.1:${port}/gpu/llm`, stop: () => child.kill() };
+}
+function llmWorld() {
+  const w = world();
+  w.ready();
+  const bin = path.join(w.base, 'bin');
+  fs.mkdirSync(bin);
+  for (const t of ['security', 'secret-tool']) fs.writeFileSync(path.join(bin, t), '#!/bin/sh\nexit 44\n', { mode: 0o755 });
+  const env = { ...w.env, PATH: `${bin}:${process.env.PATH}`, XDG_CONFIG_HOME: path.join(w.base, 'xdg') };
+  const forge = (args, cwd = w.client) => {
+    const r = spawnSync('node', [FORGE, ...args], { cwd, env, encoding: 'utf8' });
+    return { code: r.status, out: `${r.stdout}${r.stderr}` };
+  };
+  const keySrc = path.join(w.base, 'qwen-key');
+  fs.writeFileSync(keySrc, 'fake-llm-key\n', { mode: 0o600 });
+  const settings = () => JSON.parse(fs.readFileSync(path.join(w.client, '.claude/settings.local.json'), 'utf8'));
+  return { ...w, env, forge, keySrc, settings, keyFile: path.join(w.base, 'xdg/se-forge/llm-gpu-key') };
+}
+
+test('forge llm: add keeps the server on this machine and the key in a private file; use points the checkout at it, claude back (decision 140)', async () => {
+  const w = llmWorld();
+  const s = await fakeServer();
+  try {
+    assert.equal(w.forge(['setup', '--team-repo', w.team, '--pacing', 'on']).code, 0);
+    let r = w.forge(['llm', 'add', 'gpu', '--url', `${s.url}/v1/`, '--model', 'Qwen/Qwen3.8-27B', '--key-file', w.keySrc]);
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /key copied to .*\/xdg\/se-forge\/llm-gpu-key, readable by you only; you can delete .*qwen-key/);
+    assert.match(r.out, /✓ model server: http:\/\/127\.0\.0\.1:\d+\/gpu\/llm serves Qwen\/Qwen3\.8-27B/);
+    assert.match(r.out, /✓ model server: Qwen\/Qwen3\.8-27B takes tool calls/);
+    assert.equal(fs.statSync(w.keyFile).mode & 0o777, 0o600);
+    const cfg = JSON.parse(fs.readFileSync(w.env.FORGE_USER_CONFIG, 'utf8'));
+    assert.deepEqual(cfg.llm.gpu, { url: s.url, models: { opus: 'Qwen/Qwen3.8-27B', sonnet: 'Qwen/Qwen3.8-27B', haiku: 'Qwen/Qwen3.8-27B' } }, 'the address without /v1');
+    assert.equal(cfg.pacing, true, 'the rest of the machine settings stay');
+    r = w.forge(['llm']);
+    assert.match(r.out, /- gpu: http:\/\/127\.0\.0\.1:\d+\/gpu\/llm, Qwen\/Qwen3\.8-27B for opus, sonnet and haiku; key: file .*llm-gpu-key\nThis checkout runs on Claude\./);
+
+    r = w.forge(['llm', 'use', 'gpu']);
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /This checkout runs on gpu \(Qwen\/Qwen3\.8-27B for opus, sonnet and haiku\) from the next Claude Code session/);
+    assert.equal(w.settings().env.ANTHROPIC_BASE_URL, s.url);
+    assert.equal(w.settings().env.ANTHROPIC_DEFAULT_HAIKU_MODEL, 'Qwen/Qwen3.8-27B');
+    assert.equal(w.settings().env.CLAUDE_CODE_ATTRIBUTION_HEADER, '0');
+    assert.match(w.settings().apiKeyHelper, /^node ".*\/\.forge\/kit\/core\/cli\/llm-key\.mjs" gpu$/);
+    assert.ok(w.settings().hooks, 'the safety hooks stay');
+    assert.equal(gitClean(w.client), '', 'nothing is visible to git');
+    for (const out of [r.out, w.forge(['llm']).out, JSON.stringify(w.settings())]) assert.ok(!out.includes('fake-llm-key'), 'the key is never printed or written there');
+    // Claude Code runs the key helper through the shell: it prints the key and nothing else.
+    const helper = spawnSync('/bin/sh', ['-c', w.settings().apiKeyHelper], { cwd: w.client, env: w.env, encoding: 'utf8' });
+    assert.equal(helper.stdout, 'fake-llm-key');
+
+    assert.equal(w.forge(['sync']).code, 0);
+    assert.equal(w.settings().env.ANTHROPIC_BASE_URL, s.url, 'forge sync keeps it');
+    r = w.forge(['doctor']);
+    assert.match(r.out, /✓ model server gpu: http:\/\/127\.0\.0\.1:\d+\/gpu\/llm, Qwen\/Qwen3\.8-27B for opus, sonnet and haiku/);
+    assert.match(r.out, /✓ model server: key from file .*llm-gpu-key/);
+    assert.match(r.out, /✓ model server: Qwen\/Qwen3\.8-27B takes tool calls/);
+    assert.match(r.out, /· pacing off: this checkout runs on the model server gpu \(forge llm\), which has no plan windows/);
+    assert.doesNotMatch(r.out, /pacing is on for you but not in this checkout/);
+
+    // A server the machine no longer knows: sync says so and the checkout runs on Claude.
+    r = w.forge(['llm', 'remove', 'gpu']);
+    assert.match(r.out, /model server gpu removed\. Its key stays where you stored it: .*rm ".*llm-gpu-key"\.\n! this checkout is still set to gpu: forge llm use claude/);
+    r = w.forge(['sync']);
+    assert.match(r.out, /model server: this checkout is set to gpu, which this machine does not know/);
+    assert.equal(w.settings().env, undefined);
+    assert.match(w.forge(['doctor']).out, /✗ model server: this checkout is set to gpu/);
+    r = w.forge(['llm', 'use', 'claude']);
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /This checkout runs on Claude again \(it was gpu\)/);
+    assert.equal(w.settings().apiKeyHelper, undefined);
+    assert.equal(w.forge(['llm', 'use', 'claude']).out.trim(), 'This checkout runs on Claude already.');
+  } finally { s.stop(); }
+});
+
+test('forge llm: doctor says what the server lacks (tool calls, room for the lead, the key)', async () => {
+  const w = llmWorld();
+  const s = await fakeServer({ FAKE_LLM_TOOLS: 'off', FAKE_LLM_CONTEXT: '131072' });
+  try {
+    assert.equal(w.forge(['llm', 'add', 'gpu', '--url', s.url, '--model', 'Qwen/Qwen3.8-27B', '--key-file', w.keySrc]).code, 0);
+    let r = w.forge(['llm', 'use', 'gpu']);
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /✗ model server: .*\/v1\/messages refused a tool call/, 'use says it at once');
+    r = w.forge(['doctor']);
+    assert.equal(r.code, 1);
+    assert.match(r.out, /✗ model server: http:.*\/gpu\/llm\/v1\/messages refused a tool call \(HTTP 400: "auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set\)\. vLLM takes tool calls when started with --enable-auto-tool-choice/);
+    assert.match(r.out, /! model server: Qwen\/Qwen3\.8-27B has a context of 131072 tokens and the lead compacts at 200000/);
+    fs.writeFileSync(w.keyFile, 'wrong-key\n', { mode: 0o600 });
+    assert.match(w.forge(['doctor']).out, /✗ model server: http:.* refused the key \(HTTP 401: invalid api key\)/);
+    fs.chmodSync(w.keyFile, 0o644);
+    assert.match(w.forge(['doctor']).out, /✗ model server: .*llm-gpu-key is readable by others; refusing it\. Run: chmod 600/);
+  } finally { s.stop(); }
+});
+
+test('forge llm refuses what it cannot do: a bad name, address or model, no key, a key helper of your own, a kit without it', () => {
+  const w = llmWorld();
+  assert.match(w.forge(['llm', 'use', 'gpu']).out, /this machine knows no model server named gpu: forge llm add/);
+  assert.match(w.forge(['llm', 'add', 'claude', '--url', 'http://x.example', '--model', 'm']).out, /not "claude"/);
+  assert.match(w.forge(['llm', 'add', 'gpu', '--url', 'gpu.example.com', '--model', 'm']).out, /--url is the server's address/);
+  assert.match(w.forge(['llm', 'add', 'gpu', '--url', 'http://127.0.0.1:9', '--opus', 'm']).out, /sonnet, haiku has none/);
+  assert.match(w.forge(['llm', 'add', 'gpu', '--url', 'http://127.0.0.1:9', '--model', 'm', '--key-file', path.join(w.base, 'nothing')]).out, /--key-file .*nothing holds no key/);
+
+  let r = w.forge(['llm', 'add', 'gpu', '--url', 'http://127.0.0.1:9', '--model', 'm']);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /No key stored for gpu yet\. Store it once, in one of \(GUIDE\.md, H\):\n {2}macOS Keychain: {2}security add-generic-password -U -s se-forge-llm-gpu -a "\$USER" -T \/usr\/bin\/security -w/);
+  r = w.forge(['llm', 'use', 'gpu']);
+  assert.equal(r.code, 2);
+  assert.match(r.out, /no key for the model server gpu\. Looked in: the macOS Keychain \(service se-forge-llm-gpu\); the Linux keyring/);
+  assert.equal(fs.existsSync(path.join(w.client, '.forge/state/llm.json')), false);
+
+  fs.mkdirSync(path.dirname(w.keyFile), { recursive: true });
+  fs.writeFileSync(w.keyFile, 'k\n', { mode: 0o600 });
+  const file = path.join(w.client, '.claude/settings.local.json');
+  fs.writeFileSync(file, JSON.stringify({ ...w.settings(), apiKeyHelper: 'my-vault-script' }));
+  r = w.forge(['llm', 'use', 'gpu']);
+  assert.equal(r.code, 2);
+  assert.match(r.out, /\.claude\/settings\.local\.json sets apiKeyHelper itself; remove it first/);
+  assert.equal(w.settings().apiKeyHelper, 'my-vault-script', 'a person\'s own key helper is never overwritten');
+  assert.equal(w.forge(['sync']).code, 0);
+  assert.equal(w.settings().apiKeyHelper, 'my-vault-script', 'nor by forge sync');
+
+  fs.writeFileSync(file, JSON.stringify({ ...w.settings(), apiKeyHelper: undefined }));
+  fs.rmSync(path.join(w.client, '.forge/kit/core/cli/llm-key.mjs'));
+  assert.match(w.forge(['llm', 'use', 'gpu']).out, /this checkout's kit is older than forge llm \(it came with 0\.2\.38\): forge upgrade --to 0\.2\.38/);
 });

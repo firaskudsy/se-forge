@@ -6,6 +6,7 @@
 // A window whose reset time has passed counts as empty, so old data never keeps work paused.
 import fs from 'node:fs';
 import path from 'node:path';
+import { llmInUse } from './llm.mjs';
 
 export const THRESHOLDS = { five_hour: { amber: 75, red: 90 }, seven_day: { amber: 80, red: 90 } };
 const NAMES = { five_hour: '5-hour', seven_day: 'weekly' };
@@ -70,6 +71,10 @@ export function pacingState(ctx, now = Date.now()) {
   const enabled = (() => { try { return JSON.parse(fs.readFileSync(path.join(ctx.stateDir, 'pacing.json'), 'utf8')).enabled === true; } catch { return false; } })();
   if (!enabled) return { level: 'off', why: 'not turned on (forge setup --pacing on, then forge sync)' };
   if (ctx.env.ANTHROPIC_API_KEY) return { level: 'off', why: 'ANTHROPIC_API_KEY is set: API billing has no plan windows' };
+  // On a self-hosted model server (forge llm, decision 140) the Claude plan's windows say nothing; usage.json may
+  // still hold numbers from before the switch.
+  const server = llmInUse(ctx.stateDir);
+  if (server) return { level: 'off', why: `this checkout runs on the model server ${server} (forge llm), which has no plan windows` };
   let usage;
   try { usage = JSON.parse(fs.readFileSync(path.join(ctx.stateDir, 'usage.json'), 'utf8')); } catch { return { level: 'unknown', why: 'no usage recorded yet (the status line records it after the first reply)' }; }
   const { level, resetAt } = levelOf(usage, now);

@@ -53,6 +53,8 @@ const HOME_SECRET_DIRS = ['.ssh', '.aws', '.azure', '.config/gh', '.config/glab-
 export const isOpenProjectKeyPath = (p) => /(^|\/)se-forge\/+openproject-key$/.test(String(p).replace(/\\/g, '/'));
 // Its folder: .config/se-forge or $XDG_CONFIG_HOME/se-forge (not the kit's own checkout, also named se-forge).
 export const isOpenProjectKeyDir = (p) => /(^|\/)(\.config|\$\{?XDG_CONFIG_HOME[^/]*)\/+se-forge\/*$/.test(String(p).replace(/\\/g, '/'));
+// A model server's key file (forge llm, decision 140), in the same folder: se-forge/llm-<name>-key.
+export const isLlmKeyPath = (p) => /(^|\/)se-forge\/+llm-[^/]+-key$/.test(String(p).replace(/\\/g, '/'));
 
 // Secret files: .env and .env.* (except the configured placeholders), *.env, keys and certificates,
 // cloud/CLI credential folders in $HOME, service-account JSON, Terraform state.
@@ -61,7 +63,7 @@ export function isSecretPath(p, config, home) {
   const base = norm.slice(norm.lastIndexOf('/') + 1);
   if (config.secrets.allow.includes(base)) return false;
   if (base === '.env' || base.startsWith('.env.') || (base.endsWith('.env') && base.length > 4)) return true;
-  if (isOpenProjectKeyPath(norm)) return true;
+  if (isOpenProjectKeyPath(norm) || isLlmKeyPath(norm)) return true;
   if (SECRET_NAMES.has(base) || SECRET_EXT.has(path.extname(base).toLowerCase())) return true;
   if (/^id_(rsa|dsa|ecdsa|ed25519)(?!\.pub$)/.test(base)) return true;
   if (/(service[-_]?account|adminsdk).*\.json$/i.test(base)) return true;

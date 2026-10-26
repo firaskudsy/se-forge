@@ -518,6 +518,7 @@ test('the kit version: what this checkout runs, with the project\'s pin and the 
   assert.equal(kitText({ active: '0.2.15', pinned: null, cli: '0.2.15' }), 'se-forge 0.2.15', 'no pin: the project follows the forge command');
   assert.equal(kitText({ active: '0.2.10', pinned: '0.2.10', cli: '0.2.15' }), 'se-forge 0.2.10 (the forge command is 0.2.15)');
   assert.equal(kitText({ active: '0.2.10', pinned: '0.2.11', cli: '0.2.15' }), 'se-forge 0.2.10, but the project pins 0.2.11: forge sync (the forge command is 0.2.15)');
+  assert.equal(kitText({ active: '0.2.38', pinned: '0.2.38', cli: '0.2.38', llm: 'gpu (Qwen/Qwen3.8-27B)' }), 'se-forge 0.2.38, on the model server gpu (Qwen/Qwen3.8-27B)', 'forge llm (decision 140)');
   assert.equal(kitText({ active: null, pinned: '0.2.11', cli: '0.2.15' }), 'no kit in this checkout, the project pins se-forge 0.2.11: forge sync');
   assert.equal(kitText({ active: null, pinned: null, cli: '0.2.15' }), '');
   assert.equal(kitText(null), '');

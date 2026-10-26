@@ -186,7 +186,7 @@ function merge(base, over, at, errors) {
       if (!isObj(v)) { errors.push(`${where} must be an object`); continue; }
       out[k] = checkOpenproject(v, b, where, errors);
     } else if (where === 'project.prices') {
-      if (!isObj(v) || Object.entries(v).some(([m, x]) => !/^[\w.:[\]-]+$/.test(m) || !isPrice(x))) errors.push(`${where} must map a model to { "input": n, "cacheWrite5m": n, "cacheWrite1h": n, "cacheRead": n, "output": n } in dollars per million tokens`);
+      if (!isObj(v) || Object.entries(v).some(([m, x]) => !/^[\w.:/[\]-]+$/.test(m) || !isPrice(x))) errors.push(`${where} must map a model to { "input": n, "cacheWrite5m": n, "cacheWrite1h": n, "cacheRead": n, "output": n } in dollars per million tokens`);
       else out[k] = v;
     } else if (isObj(b)) {
       if (!isObj(v)) errors.push(`${where} must be an object`);

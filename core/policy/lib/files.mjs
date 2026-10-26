@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { deny, ask } from './decision.mjs';
-import { resolvePath, isSecretPath, isManifest, wordNamesSecret, isOpenProjectKeyPath, isOpenProjectKeyDir } from './paths.mjs';
+import { resolvePath, isSecretPath, isManifest, wordNamesSecret, isOpenProjectKeyPath, isOpenProjectKeyDir, isLlmKeyPath } from './paths.mjs';
 import { PROC_ENVIRON } from './rules/secrets.mjs';
 import { writeFindings } from './rules/targets.mjs';
 import { linkedPath } from './context.mjs';
@@ -117,11 +117,13 @@ export function imageRefs(file, text) {
 
 const READ_MSG = 'Secret files are never opened by agents. Use .env.example for variable names; scripts load credentials by variable name.';
 const KEY_MSG = 'The OpenProject API key file is never opened or written by an agent. Use `forge tracker`; it loads the key itself.';
+const LLM_KEY_MSG = 'A model server\'s key file is never opened or written by an agent. Claude Code loads the key itself (forge llm).';
 const ENV_MSG = 'A process environment file can print secrets. Ask for one variable by name instead.';
 
-// The OpenProject key file or its folder, a glob into that folder, or a process environment file.
+// A model server's or the OpenProject key file, their folder, a glob into that folder, or a process environment file.
 function keyFindings(paths, ctx) {
   const abs = paths.map((p) => resolvePath(p, ctx.cwd, ctx.home));
+  if (abs.some(isLlmKeyPath) || paths.some((p) => /(^|[/\\])llm-[^/\\]+-key$/.test(p))) return [deny('llm:key', LLM_KEY_MSG)];
   if (abs.some((p) => isOpenProjectKeyPath(p) || isOpenProjectKeyDir(p))
     || paths.some((p) => /(^|[/\\])openproject-key$/.test(p))) return [deny('openproject:key', KEY_MSG)];
   if (paths.some((p) => PROC_ENVIRON.test(p))) return [deny('secrets:env-dump', ENV_MSG)];

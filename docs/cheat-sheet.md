@@ -77,6 +77,7 @@ claude
 | Join a project | `forge init --project <slug>`, `forge doctor` |
 | Get the team's changes to plans and settings | `git pull` in `se-forge-projects`, `forge sync` |
 | Share your plans and reports | `forge save -m "<what>"` (the lead is reminded when it forgets) |
+| Run the agents on your own model server | once: `forge llm add <name> --url <address> --model <model> --key-file <file>`; then in the app, at a `/pause`: `forge llm use <name>` (`forge llm use claude` back). The server needs Anthropic's `/v1/messages` with tool calls (GUIDE.md, H) |
 
 ## Every day
 | You want to | Run |

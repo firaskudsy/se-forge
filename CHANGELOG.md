@@ -8,6 +8,23 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ## [Unreleased]
 
+### Added
+- **`forge llm`: agents on a self-hosted model server instead of Claude** (decision 140, GUIDE.md H). `forge llm add
+  <name> --url <address> --model <model> [--key-file <file>]` keeps a server in this machine's settings (never in the
+  team repo) and checks it: reachable with the key, serving the model, its context, a tool call. `forge llm use
+  <name>` in an app's checkout points Claude Code there from the next session: `forge sync` writes the address, the
+  server's model for `opus`, `sonnet` and `haiku`, no attribution block, and a key helper into
+  `.claude/settings.local.json`; `forge llm use claude` switches back. The key stays in the Keychain, the Linux
+  keyring or a private file, and Claude Code loads it through `core/cli/llm-key.mjs`. The server needs Anthropic's
+  `/v1/messages` with tool calls (vLLM, Ollama 0.14+, llama.cpp's server).
+- `forge doctor` checks the checkout's model server; the dashboard's kit line names it; pacing is off on it (a
+  self-hosted server has no plan windows).
+- New rules: agents never read a model server's key or run its key helper (`[llm:key]`), and never choose the server
+  (`[llm:person]`).
+
+### Changed
+- `project.prices` accepts model names with a `/` (`"Qwen/Qwen3.8-27B"`), as self-hosted servers name them.
+
 ## [0.2.37] - 2026-10-26
 
 ### Changed

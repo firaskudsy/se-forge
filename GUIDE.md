@@ -1,6 +1,6 @@
 # se-forge: the guide
 
-From zero to an app built from client requirements, or to changes in a system that already exists. Seven parts:
+From zero to an app built from client requirements, or to changes in a system that already exists. Eight parts:
 - **A.** Set up GitLab, once for the company.
 - **B.** Set up each MacBook, once per person.
 - **C.** Start a new app from client requirements.
@@ -8,6 +8,7 @@ From zero to an app built from client requirements, or to changes in a system th
 - **E.** Measure and improve: where the time and the money go.
 - **F.** An existing system of several repositories (system mode, first phase).
 - **G.** Configuration: a project whose tickets live in OpenProject.
+- **H.** Configuration: agents on a self-hosted model server instead of Claude.
 
 The examples use **https://gitlab.example.com** for your GitLab server: replace it with your server's address,
 and `<group>` with your GitLab group's name, for example `ai`, everywhere. To be sure, open any project in GitLab
@@ -681,6 +682,62 @@ Todo and Ready for Development leave the card where it is.
 **What OpenProject lacks.** It has no labels: `--source`, `--area` and `--repo` go into a `Labels:` line at the end
 of the description. Cards are moved on basic boards only. `ready` is a status
 (`readyStatus`), not a label.
+
+## H. Configuration: a self-hosted model server
+
+`forge llm` runs a checkout's agents on a model server of your own, for example vLLM serving Qwen on a GPU
+machine, instead of Claude (decision 140). Claude Code stays the harness: the hooks, roles, skills and gates are the
+same, only the model behind them changes. The choice is yours and per checkout: nothing of it is in the team repo,
+so a teammate's checkout of the same app stays on Claude. Anthropic does not support Claude Code on other models;
+it works through Claude Code's gateway settings, and a weaker model fails more steps (more failed gates and review
+rounds, more tickets parked at their limits, decision 127).
+
+**1. What the server needs.** Anthropic's Messages format at `<address>/v1/messages`, with tool calls (every step
+of Claude Code is one), and a context of 200k tokens or more (the lead compacts at 200k, lanes stop at 120k). vLLM,
+Ollama 0.14 or later and llama.cpp's `llama-server` speak it; an OpenAI-only server needs a translator such as
+LiteLLM in front. vLLM takes tool calls only when started with `--enable-auto-tool-choice` and a
+`--tool-call-parser` for the model, and keeps the model's thinking out of its answers with a `--reasoning-parser`.
+For Qwen 3.8: `--reasoning-parser qwen3 --enable-auto-tool-choice --tool-call-parser qwen3_coder`.
+
+**2. The server and its key, once per machine:**
+```
+forge llm add qwen --url https://gpu.example.com/llm --model Qwen/Qwen3.8-27B --key-file ~/Downloads/qwen-key
+```
+- `--url`: the address Claude Code adds `/v1/messages` to (a trailing `/v1` is dropped).
+- `--model`: the server's model for `opus`, `sonnet` and `haiku`, the aliases the kit's tiers ask for
+  (`project.models`). `--opus`, `--sonnet` and `--haiku` set one each, for a server with several models.
+- `--key-file`: copies the key to `${XDG_CONFIG_HOME:-~/.config}/se-forge/llm-qwen-key`, readable by you only;
+  then delete the file you gave. Or keep the key in the macOS Keychain
+  (`security add-generic-password -U -s se-forge-llm-qwen -a "$USER" -T /usr/bin/security -w`, which asks for it)
+  or the Linux keyring (`secret-tool store --label="se-forge model server qwen" service se-forge-llm-qwen`). The
+  Keychain wins, then the keyring, then the file. A server that takes no key still needs one stored: any word.
+
+`add` checks the server at once: reachable with the key, serving the models, its context, a tool call. `forge llm`
+lists the servers this machine knows and where each key is (never the key); `forge llm remove <name>` forgets one.
+
+**3. A checkout on it**, in the app's folder, at a `/pause`:
+```
+forge llm use qwen
+```
+`forge sync` then writes into `.claude/settings.local.json` (local, never committed): the address, the server's
+model for each alias and for the session itself, `CLAUDE_CODE_ATTRIBUTION_HEADER=0` (Anthropic's API strips that
+block; another server reads it as part of the prompt and of its cache key), and a key helper. Claude Code runs
+`node .forge/kit/core/cli/llm-key.mjs qwen` for the key, so the key is in no file the agents work in. Start a new
+Claude Code session and `/resume`; `/status` shows the server's address. `forge llm use claude` switches back the
+same way. If you set `apiKeyHelper` or one of those variables in that file yourself, `use` refuses rather than
+overwrite them.
+
+**What changes on a self-hosted server:**
+- Pacing is off: the server has no plan windows, and the Claude plan's last numbers pause nothing.
+- `forge doctor` checks the server every time: the settings, where the key is, and the server's answers.
+- The dashboard names the server next to the kit version, and its charts show the server's model. For a cost, add
+  the model to `project.prices` under its full name (`"Qwen/Qwen3.8-27B": { … }`), at zero or what it costs you.
+- A server may not report cache hits: the dashboard then counts every token as new.
+- One session talks to one server, so every tier runs there.
+- Remote Control and voice dictation are off while Claude Code uses a key helper.
+- Agents never read the key (`[llm:key]`, `[keychain:password]`) and never choose the server (`[llm:person]`): a
+  person runs `forge llm use`, in a terminal or with `!` in the session.
+- The checkout's kit is 0.2.38 or later (`forge upgrade --to 0.2.38`): its hooks guard the key and turn pacing off.
 
 ---
 

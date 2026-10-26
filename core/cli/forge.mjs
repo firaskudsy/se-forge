@@ -40,6 +40,9 @@
 //   forge lane open <ticket> [--name <n>] [--review] | close <path>   in a system: a worktree in the member
 //                                         repository the ticket's plan names (Repo:), for one agent (the lead's)
 //   forge pacing                          plan usage and pacing level (exit 0 green, 1 amber, 2 red, 3 off/unknown)
+//   forge llm [add <name> --url <address> --model <model> [--key-file <file>] | use <name>|claude | remove <name>]
+//                                         a self-hosted model server instead of Claude (decision 140): the servers
+//                                         this machine knows; use: this checkout's agents run there from the next session
 //   forge worktrees [--clean]             the agents' worktrees: running, done or unfinished (exit 0 when safe to
 //                                         close); --clean removes the done ones, never anything unfinished
 //   forge version
@@ -73,6 +76,8 @@ import { app, appInfo, AppError } from './app.mjs';
 import { checkSystem, memberOf, memberSettings, systemOf } from '../policy/lib/system.mjs';
 import { lane, LaneError } from './lane.mjs';
 import { limits, LimitsError } from './limits.mjs';
+import { llm, llmFor, llmDoctor, llmLabel, LlmError } from './llm.mjs';
+import { llmInUse } from '../policy/lib/llm.mjs';
 import { record, clip } from '../policy/lib/timeline.mjs';
 
 const BASE_EXCLUDES = ['/.forge/', '/.claude/settings.local.json', '/.claude/worktrees/'];
@@ -191,7 +196,7 @@ function installGitHooks(main, kitDir) {
 // The project's folder in the team repo (behind the .forge/project link, outside the checkout) is an
 // additional working directory, so plans and reports are read and written without a prompt per file;
 // the safety hooks treat it as .forge/project.
-function applySettings(main, kitDir, { branches = [], coAuthor = true, pacing = false, projectDir, compactAt }) {
+function applySettings(main, kitDir, { branches = [], coAuthor = true, pacing = false, projectDir, compactAt, llm = null }) {
   const file = path.join(main, '.claude', 'settings.local.json');
   const managedFile = path.join(main, '.forge', 'state', 'settings-managed.json');
   const tpl = JSON.parse(fs.readFileSync(path.join(kitDir, 'adapters/claude/settings.local.template.json'), 'utf8'));
@@ -223,8 +228,14 @@ function applySettings(main, kitDir, { branches = [], coAuthor = true, pacing = 
   const ourLine = (s) => String(s?.command || '').includes(OUR_STATUS_LINE);
   if (pacing && (!current.statusLine || ourLine(current.statusLine))) current.statusLine = { type: 'command', command: `node "${path.join(kitDir, 'extras', 'pacing', 'statusline.mjs')}"` };
   if (!pacing && ourLine(current.statusLine)) delete current.statusLine;
+  // A self-hosted model server (forge llm, decision 140): its address, model names and key helper, or none on Claude.
+  current.env ??= {};
+  for (const k of old.env || []) delete current.env[k];
+  if (old.apiKeyHelper && current.apiKeyHelper === old.apiKeyHelper) delete current.apiKeyHelper;
+  if (llm) { Object.assign(current.env, llm.env); current.apiKeyHelper = llm.apiKeyHelper; }
+  if (!Object.keys(current.env).length) delete current.env;
   writeJson(file, current);
-  writeJson(managedFile, { ...Object.fromEntries(['allow', 'ask', 'deny'].map((l) => [l, tpl.permissions[l]])), attribution: !coAuthor, additionalDirectories: [projectDir] });
+  writeJson(managedFile, { ...Object.fromEntries(['allow', 'ask', 'deny'].map((l) => [l, tpl.permissions[l]])), attribution: !coAuthor, additionalDirectories: [projectDir], env: llm ? Object.keys(llm.env) : [], apiKeyHelper: llm?.apiKeyHelper ?? null });
   return ourLine(current.statusLine);
 }
 
@@ -280,8 +291,11 @@ async function sync(main, o, env, out) {
   const generated = [...new Set([...files.keys()].map((rel) => (rel.startsWith('.claude/skills/') ? `/${rel.split('/').slice(0, 3).join('/')}/` : `/${rel}`)))];
   writeExcludes(main, generated);
   const { config, project } = loadConfig(main, env);
-  const pacing = readJson(userConfigFile(env), {}).pacing === true;
-  const paced = applySettings(main, kitDir, { branches: [...new Set([config.branches.base, ...config.branches.promote, ...config.branches.protected])].filter((b) => !b.includes('*')), coAuthor: project.coAuthor, pacing, projectDir: folder, compactAt: leadCompactAt(config.budget) });
+  const machine = readJson(userConfigFile(env), {});
+  const pacing = machine.pacing === true;
+  const server = llmFor({ stateDir: path.join(main, '.forge', 'state'), kitDir, cfg: machine, settings: readJson(path.join(main, '.claude', 'settings.local.json'), {}), managed: readJson(path.join(main, '.forge', 'state', 'settings-managed.json'), {}) });
+  if (server.warn) out(`model server: ${server.warn}`);
+  const paced = applySettings(main, kitDir, { branches: [...new Set([config.branches.base, ...config.branches.promote, ...config.branches.protected])].filter((b) => !b.includes('*')), coAuthor: project.coAuthor, pacing, projectDir: folder, compactAt: leadCompactAt(config.budget), llm: server.settings ?? null });
   writeJson(path.join(main, '.forge', 'state', 'pacing.json'), { enabled: paced });
   if (pacing && !paced) out('pacing: .claude/settings.local.json has a status line of your own; remove it and run forge sync to use pacing');
   installGitHooks(main, kitDir);
@@ -478,7 +492,7 @@ function systemDoctor(main, env, check) {
   }
 }
 
-function doctor(env, cwd, out) {
+async function doctor(env, cwd, out) {
   const results = [];
   const check = (level, msg) => results.push({ level, msg });
   const node = Number(process.versions.node.split('.')[0]);
@@ -533,9 +547,15 @@ function doctor(env, cwd, out) {
   check(sealed ? 'ok' : 'fail', sealed ? 'claude.ai connectors off in this project' : 'claude.ai connectors (mail, documents, calendars) are on in this project: forge sync');
   const hooksPath = git(main, ['config', '--get', 'core.hooksPath']).out;
   check(hooksPath.endsWith(path.join('.forge', 'kit', 'core', 'githooks')) ? 'ok' : 'fail', hooksPath.includes('.forge/kit/core/githooks') ? 'git hooks wired' : `git hooks not wired (core.hooksPath is ${hooksPath || 'unset'}; something reset it, e.g. husky): forge sync`);
-  const pace = pacingState({ stateDir: path.join(main, '.forge', 'state'), env });
-  if (readJson(userConfigFile(env), {}).pacing === true && pace.level === 'off' && !env.ANTHROPIC_API_KEY) check('warn', 'pacing is on for you but not in this checkout: forge sync');
+  const stateDir = path.join(main, '.forge', 'state');
+  const pace = pacingState({ stateDir, env });
+  const machine = readJson(userConfigFile(env), {});
+  if (machine.pacing === true && pace.level === 'off' && !env.ANTHROPIC_API_KEY && !llmInUse(stateDir)) check('warn', 'pacing is on for you but not in this checkout: forge sync');
   else check('info', pace.level === 'off' ? `pacing off: ${pace.why}` : pace.level === 'unknown' ? `pacing on: ${pace.why}` : `pacing on: ${pace.level}, ${pace.text} (recorded ${pace.age}s ago)`);
+  if (folder) {
+    const { config, project } = loadConfig(main, env);
+    for (const r of await llmDoctor({ stateDir, kitDir: path.join(main, '.forge', 'kit'), cfg: machine, settings, managed: readJson(path.join(stateDir, 'settings-managed.json'), {}), models: project.models, needContext: leadCompactAt(config.budget), env })) check(r.level, r.msg);
+  }
   check('info', 'server gates are not checked automatically yet: follow core/server/<host>.md');
   return report(results, out);
 }
@@ -694,7 +714,7 @@ async function run(argv, env, cwd, out, failed) {
         out(`project pinned to se-forge ${o.to} (was ${from}); run forge save so teammates get it`);
         return 0;
       }
-      case 'doctor': return doctor(env, cwd, out);
+      case 'doctor': return await doctor(env, cwd, out);
       case 'save': return save(o, cwd, out);
       case 'gates': {
         const r = gatesCommand(env, cwd);
@@ -770,6 +790,12 @@ async function run(argv, env, cwd, out, failed) {
         return { green: 0, amber: 1, red: 2 }[pace.level] ?? 3;
       }
       case 'worktrees': return worktrees(o, cwd, out);
+      case 'llm': {
+        let m = null;
+        try { m = checkout(cwd).main; } catch { /* the list, add and remove work anywhere */ }
+        const c = m ? loadConfig(m, env) : null;
+        return await llm(o, { env, cwd, out, cfgFile: userConfigFile(env), main: m, sync: () => sync(m, {}, env, out), needContext: c ? leadCompactAt(c.config.budget) : undefined, models: c?.project.models });
+      }
       case 'dashboard': {
         const { main: m } = checkout(cwd);
         const folder = projectFolder(m);
@@ -792,7 +818,7 @@ async function run(argv, env, cwd, out, failed) {
         const build = async () => {
           // The tracker's issues and their history (decision 122); --offline draws from the last read.
           const issues = project.tracker ? await readIssues({ main: m, stateDir: path.join(m, '.forge', 'state'), tracker: project.tracker, board: project.board, env, offline: o.offline === true }) : null;
-          const model = dashboardModel({ main: m, folder, teamRoot: top.out, base: config.branches.base, stateDir: path.join(m, '.forge', 'state'), prices: project.prices, engineers: config.budget.engineers, days: o.days ? Number(o.days) : null, only, kit: { active: readVersion(path.join(m, '.forge', 'kit')), pinned, cli: kitVersion() }, issues, app: o.text === true ? null : appInfo(m, env),
+          const model = dashboardModel({ main: m, folder, teamRoot: top.out, base: config.branches.base, stateDir: path.join(m, '.forge', 'state'), prices: project.prices, engineers: config.budget.engineers, days: o.days ? Number(o.days) : null, only, kit: { active: readVersion(path.join(m, '.forge', 'kit')), pinned, cli: kitVersion(), llm: llmLabel(path.join(m, '.forge', 'state'), readJson(userConfigFile(env), {})) }, issues, app: o.text === true ? null : appInfo(m, env),
             architecture: o.text === true ? null : architectureModel({ main: m, folder, base: config.branches.base, project, config, env, stateDir: path.join(m, '.forge', 'state') }), watch: watch ? { every } : null, limits: config.limits, tracker: project.tracker, repos,
             stack: [...Object.values(project.stack ?? {}), ...(systemOf(m)?.repos ?? []).map((r) => r.stack)].filter((v) => typeof v === 'string') });
           if (o.text === true) return { model };
@@ -858,7 +884,7 @@ async function run(argv, env, cwd, out, failed) {
       }
     }
   } catch (e) {
-    if (e instanceof UsageError || e instanceof ApiError || e instanceof DesignError || e instanceof MergeError || e instanceof DocsError || e instanceof StarterError || e instanceof MetricsError || e instanceof ShotError || e instanceof AppError || e instanceof LimitsError || e instanceof LaneError) { process.stderr.write(`forge ${cmd}: ${e.message}\n`); failed(e.message); return 2; }
+    if (e instanceof UsageError || e instanceof ApiError || e instanceof DesignError || e instanceof MergeError || e instanceof DocsError || e instanceof StarterError || e instanceof MetricsError || e instanceof ShotError || e instanceof AppError || e instanceof LimitsError || e instanceof LaneError || e instanceof LlmError) { process.stderr.write(`forge ${cmd}: ${e.message}\n`); failed(e.message); return 2; }
     throw e;
   }
 }

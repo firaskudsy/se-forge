@@ -72,6 +72,13 @@ test('amber, off, or an API key: spawning is not paused', () => {
   assert.equal(decision(pre(paced(95, 10, { reset: now() - 5 }), 'Agent', { subagent_type: 'scout', prompt: 'x' })), 'allow', 'the window has reset');
 });
 
+test('on a self-hosted model server pacing is off: the Claude plan\'s numbers from before the switch pause nothing (decision 140)', () => {
+  const dir = paced(95);
+  fs.writeFileSync(path.join(dir, '.forge/state/llm.json'), JSON.stringify({ server: 'gpu' }));
+  assert.equal(decision(pre(dir, 'Agent', { subagent_type: 'scout', prompt: 'x' })), 'allow');
+  assert.equal(note(post(dir, 'Read')), '', 'and the lead hears nothing of it');
+});
+
 test('notes: the lead hears amber once; each lane hears red once', () => {
   const amber = paced(80);
   assert.match(note(post(amber, 'Read')), /^\[pacing\] Plan usage: 5-hour 80%.*start nothing large/);
