@@ -1,6 +1,7 @@
 // forge llm (decision 140): a checkout's agents on a self-hosted model server instead of Claude's.
 //   forge llm                         the servers this machine knows, and the one this checkout runs on
 //   forge llm add <name> --url <address> --model <model> [--opus <m>] [--sonnet <m>] [--haiku <m>] [--key-file <file>]
+//                     [--context <tokens>]
 //   forge llm use <name> | claude     from the next Claude Code session, this checkout runs there (or on Claude)
 //   forge llm remove <name>
 // The servers live in the machine's settings, never in the team repo: an address and a key are a person's. Claude
@@ -10,17 +11,30 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { NAME, findKey, keyFile, keyService } from './llm-key.mjs';
 import { llmInUse } from '../policy/lib/llm.mjs';
+import { leadCompactAt } from '../policy/lib/config.mjs';
 
 export class LlmError extends Error {}
 
 const ALIASES = ['opus', 'sonnet', 'haiku'];
 const MODEL = /^[\w.:/@[\]-]+$/;
 const MARK = { ok: '✓', warn: '!', fail: '✗', info: '·' };
-const USAGE_ADD = 'forge llm add <name> --url <address> --model <model> [--opus <m>] [--sonnet <m>] [--haiku <m>] [--key-file <file>]';
+const USAGE_ADD = 'forge llm add <name> --url <address> --model <model> [--opus <m>] [--sonnet <m>] [--haiku <m>] [--key-file <file>] [--context <tokens>]';
 const USAGE = `forge llm | ${USAGE_ADD} | forge llm use <name>|claude | forge llm remove <name>`;
 const readJson = (file, fallback) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; } };
 const writeJson = (file, data) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`); };
 const line = (r) => `${MARK[r.level]} ${r.msg}`;
+const kTokens = (n) => `${Math.round(n / 1000)}k`;
+
+// The room a conversation keeps below the model's context on a server (decision 142): the 32k tokens Claude Code asks
+// for a reply, and a jump such as loading a set of tools mid-session (on budget-guru, three Figma tools added about
+// 80k at once and took the lead past Qwen's 262,144).
+const REPLY = 32000;
+const JUMP = 80000;
+export const HEADROOM = REPLY + JUMP;
+// Where the lead compacts on a server with that context: the headroom below it, and never under Claude Code's 100k.
+export const leadCapFor = (context) => Math.max(100000, Math.floor((context - HEADROOM) / 1000) * 1000);
+// The lead's compaction point for this checkout: the budget's, lowered to the server's cap when its context is known.
+export const leadWindow = (server, budget) => Math.min(leadCompactAt(budget), server?.context ? leadCapFor(server.context) : Infinity);
 
 export function modelsText(models) {
   const names = [...new Set(ALIASES.map((a) => models[a]))];
@@ -31,11 +45,13 @@ export function modelsText(models) {
 // session's own model is the opus one, as the lead's is), no attribution block (Anthropic's API strips it, another
 // server reads it as part of the prompt and of its cache key), auto mode's checks made by Claude Code itself (only
 // Anthropic's API makes them server-side; without this, auto mode holds the session on a notice), and the key helper.
+// compactAt: the lead's compaction cap on this server (forge sync takes the lower of it and the budget's).
 export function llmSettings(name, server, kitDir) {
   const m = server.models;
   return {
     env: { ANTHROPIC_BASE_URL: server.url, ANTHROPIC_MODEL: m.opus, ANTHROPIC_DEFAULT_OPUS_MODEL: m.opus, ANTHROPIC_DEFAULT_SONNET_MODEL: m.sonnet, ANTHROPIC_DEFAULT_HAIKU_MODEL: m.haiku, ANTHROPIC_DEFAULT_FABLE_MODEL: m.opus, CLAUDE_CODE_ATTRIBUTION_HEADER: '0', CLAUDE_CODE_AUTO_MODE_SERVER: '0' },
     apiKeyHelper: `node "${path.join(kitDir, 'core', 'cli', 'llm-key.mjs')}" ${name}`,
+    compactAt: server.context ? leadCapFor(server.context) : null,
   };
 }
 const LLM_ENV = Object.keys(llmSettings('x', { url: '', models: {} }, '').env);
@@ -70,10 +86,10 @@ const why = (r) => {
   return String(j?.error?.message ?? (typeof j?.error === 'string' ? j.error : null) ?? j?.message ?? r.text.slice(0, 200)).trim();
 };
 
-// What the server answers, as forge doctor lines: reachable with the key, serving the models with room for the lead's
-// context, and taking tool calls in Anthropic's format (every step of Claude Code is one). The key goes in both
-// headers, as Claude Code's key helper sends it.
-export async function probe(server, key, { needContext = 200000, fetchImpl = fetch, timeoutMs = 20000 } = {}) {
+// What the server answers, as forge doctor lines: reachable with the key, serving the models with room for the kit's
+// conversations, and taking tool calls in Anthropic's format (every step of Claude Code is one). The key goes in both
+// headers, as Claude Code's key helper sends it. info.context: the smallest context the server reports for the models.
+export async function probe(server, key, { budget = null, info = {}, fetchImpl = fetch, timeoutMs = 20000 } = {}) {
   const headers = { authorization: `Bearer ${key}`, 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' };
   const call = async (to, body) => {
     try {
@@ -96,7 +112,13 @@ export async function probe(server, key, { needContext = 200000, fetchImpl = fet
     const missing = models.filter((m) => !served.has(m));
     if (missing.length) out.push({ level: 'fail', msg: `model server: ${missing.join(', ')} not served at ${server.url} (it serves ${[...served.keys()].join(', ') || 'nothing'})` });
     else out.push({ level: 'ok', msg: `model server: ${server.url} serves ${models.join(', ')}` });
-    for (const m of models.filter((x) => served.get(x)?.max_model_len < needContext)) out.push({ level: 'warn', msg: `model server: ${m} has a context of ${served.get(m).max_model_len} tokens and the lead compacts at ${needContext}: a long session fails before then` });
+    const sizes = models.map((m) => served.get(m)?.max_model_len).filter((n) => Number.isFinite(n));
+    if (sizes.length) {
+      const context = Math.min(...sizes);
+      info.context = context;
+      if (context < 100000 + HEADROOM) out.push({ level: 'warn', msg: `model server: a context of ${context} tokens is too small for the kit: the lead compacts at 100k at the least, and needs ${kTokens(HEADROOM)} of room above that (a ${kTokens(REPLY)} reply, a ${kTokens(JUMP)} jump such as loading tools)` });
+      else if (budget && budget.block + HEADROOM > context) out.push({ level: 'warn', msg: `model server: lanes stop at ${kTokens(budget.block)} (policy.budget.block), and a context of ${context} leaves room for ${kTokens(context - HEADROOM)} once a reply and a jump such as loading tools are counted: keep policy.budget.block at or below ${context - HEADROOM}` });
+    }
   } else out.push({ level: 'info', msg: `model server: no model list at ${server.url}/v1/models (HTTP ${list.status}), so the model names are not checked` });
   const reply = await call('/v1/messages', { model: server.models.opus, max_tokens: 1, tools: [{ name: 'probe', description: 'A connection check.', input_schema: { type: 'object', properties: {} } }], messages: [{ role: 'user', content: 'ping' }] });
   if (reply.error) out.push({ level: 'fail', msg: `model server: ${server.url}/v1/messages cannot be reached: ${reply.error}` });
@@ -110,7 +132,7 @@ export async function probe(server, key, { needContext = 200000, fetchImpl = fet
 }
 
 // forge doctor's lines for the checkout's model server.
-export async function llmDoctor({ stateDir, kitDir, cfg, settings, managed, models, needContext, env }) {
+export async function llmDoctor({ stateDir, kitDir, cfg, settings, managed, models, budget, env }) {
   const name = llmInUse(stateDir);
   const known = Object.keys(cfg.llm || {});
   if (!name) return known.length ? [{ level: 'info', msg: `model server: Claude (this machine also knows ${known.join(', ')}: forge llm use <name>)` }] : [];
@@ -120,10 +142,15 @@ export async function llmDoctor({ stateDir, kitDir, cfg, settings, managed, mode
   const written = Object.entries(r.settings.env).every(([k, v]) => settings.env?.[k] === v) && settings.apiKeyHelper === r.settings.apiKeyHelper;
   const out = [written ? { level: 'ok', msg: `model server ${name}: ${server.url}, ${modelsText(server.models)}` } : { level: 'fail', msg: `model server ${name}: .claude/settings.local.json does not point Claude Code at it: forge sync` }];
   out.push(...fullNames(models).map((e) => fullNameLine(e, name)));
+  out.push(server.context
+    ? { level: 'ok', msg: `model server: the lead compacts at ${kTokens(leadWindow(server, budget))} there (a context of ${server.context}, less ${kTokens(HEADROOM)} for a reply and a jump such as loading tools)` }
+    : { level: 'warn', msg: `model server: ${name}'s context is not known, so the lead compacts at ${kTokens(leadCompactAt(budget))} and may go past it: forge llm use ${name} again reads it from the server, or forge llm add ${name} … --context <tokens>` });
+  // Claude Code compacts some 35k before its window (measured: at about 66k of a 100k one); the handover line must come first.
+  if (server.context && budget.leadWarn > leadWindow(server, budget) - 40000) out.push({ level: 'warn', msg: `model server: the lead's handover line (policy.budget.leadWarn, ${kTokens(budget.leadWarn)}) comes after it compacts on ${name} (window ${kTokens(leadWindow(server, budget))}): set leadWarn to ${leadWindow(server, budget) - 40000} or less` });
   const k = findKey(name, env);
   if (k.error) return [...out, { level: 'fail', msg: `model server: ${k.error}` }];
   out.push({ level: 'ok', msg: `model server: key from ${k.source}` });
-  return [...out, ...(await probe(server, k.key, { needContext }))];
+  return [...out, ...(await probe(server, k.key, { budget }))];
 }
 
 // The dashboard's words for the server a checkout runs on, or null on Claude.
@@ -140,7 +167,7 @@ const storeHint = (name, env) => [
   `  a private file:  forge llm add ${name} … --key-file <file> (copied to ${keyFile(name, env)})`,
 ].join('\n');
 
-export async function llm(o, { env, cwd, out, cfgFile, main, sync, needContext, models }) {
+export async function llm(o, { env, cwd, out, cfgFile, main, sync, budget, models }) {
   const [sub, name] = o._;
   const cfg = readJson(cfgFile, {});
   const servers = cfg.llm || {};
@@ -152,7 +179,7 @@ export async function llm(o, { env, cwd, out, cfgFile, main, sync, needContext, 
     if (!names.length) out(`No model servers on this machine: ${USAGE_ADD}`);
     else {
       out('Model servers on this machine:');
-      for (const n of names) { const k = findKey(n, env); out(`- ${n}: ${servers[n].url}, ${modelsText(servers[n].models)}; key: ${k.error ? 'none stored' : k.source}`); }
+      for (const n of names) { const k = findKey(n, env); out(`- ${n}: ${servers[n].url}, ${modelsText(servers[n].models)}${servers[n].context ? `, context ${servers[n].context}` : ''}; key: ${k.error ? 'none stored' : k.source}`); }
     }
     if (stateDir) out(`This checkout runs on ${llmInUse(stateDir) ?? 'Claude'}.`);
     return 0;
@@ -165,6 +192,8 @@ export async function llm(o, { env, cwd, out, cfgFile, main, sync, needContext, 
     const picked = Object.fromEntries(ALIASES.map((a) => [a, typeof o[a] === 'string' ? o[a] : typeof o.model === 'string' ? o.model : '']));
     const none = ALIASES.filter((a) => !MODEL.test(picked[a]));
     if (none.length) throw new LlmError(`--model names the server's model for opus, sonnet and haiku (or --opus, --sonnet, --haiku one by one); ${none.join(', ')} has none: ${USAGE_ADD}`);
+    const given = o.context === undefined ? null : Number(o.context);
+    if (given !== null && !(Number.isInteger(given) && given >= 100000)) throw new LlmError(`--context is the model's context in tokens, 100000 or more (e.g. 262144): ${USAGE_ADD}`);
     if (o['key-file'] !== undefined) {
       const from = path.resolve(cwd, String(o['key-file']));
       const key = fs.existsSync(from) && fs.statSync(from).isFile() ? fs.readFileSync(from, 'utf8').split(/\r?\n/)[0].trim() : '';
@@ -175,15 +204,20 @@ export async function llm(o, { env, cwd, out, cfgFile, main, sync, needContext, 
       fs.chmodSync(to, 0o600);
       out(`key copied to ${to}, readable by you only; you can delete ${from}`);
     }
-    cfg.llm = { ...servers, [name]: { url, models: picked } };
+    cfg.llm = { ...servers, [name]: { url, models: picked, ...(given ? { context: given } : {}) } };
     writeJson(cfgFile, cfg);
     out(`model server ${name}: ${url}, ${modelsText(picked)}`);
     const k = findKey(name, env);
     if (k.error) out(storeHint(name, env));
     else {
       out(`key: ${k.source}`);
-      for (const r of await probe(cfg.llm[name], k.key)) out(line(r));
+      const info = {};
+      for (const r of await probe(cfg.llm[name], k.key, { budget, info })) out(line(r));
+      // The server's own figure, unless one was given (a proxy or server can report a larger one than it takes).
+      if (!given && info.context) { cfg.llm[name].context = info.context; writeJson(cfgFile, cfg); }
     }
+    const context = cfg.llm[name].context;
+    out(context ? `context: ${context} tokens; the lead compacts at ${kTokens(leadCapFor(context))} on it` : `context: not reported by the server; give it with --context <tokens>, or the lead compacts at 200k`);
     out(`In an app's checkout: forge llm use ${name}`);
     return 0;
   }
@@ -208,10 +242,15 @@ export async function llm(o, { env, cwd, out, cfgFile, main, sync, needContext, 
     if (k.error) throw new LlmError(`${k.error}\n${storeHint(name, env)}`);
     const own = ownSettings(readJson(path.join(main, '.claude', 'settings.local.json'), {}), readJson(path.join(stateDir, 'settings-managed.json'), {}));
     if (own.length) throw new LlmError(`.claude/settings.local.json sets ${own.join(', ')} itself; remove ${own.length === 1 ? 'it' : 'them'} first, so forge llm does not overwrite ${own.length === 1 ? 'it' : 'them'}`);
+    // The server is checked first, so forge sync caps the lead's compaction at its context (decision 142).
+    const info = {};
+    const checks = await probe(server, k.key, { budget, info });
+    if (info.context && !server.context) { server.context = info.context; writeJson(cfgFile, cfg); }
     writeJson(stateFile, { server: name });
     try { await sync(); } catch (e) { restore(); throw e; }
     for (const e of fullNames(models)) out(line(fullNameLine(e, name)));
-    for (const r of await probe(server, k.key, { needContext })) out(line(r));
+    for (const r of checks) out(line(r));
+    if (server.context) out(`The lead compacts at ${kTokens(leadWindow(server, budget))} on ${name} (a context of ${server.context}, less ${kTokens(HEADROOM)} of room).`);
     out(`This checkout runs on ${name} (${modelsText(server.models)}) ${switched}. If Claude Code warns that two credentials are set, the key helper is the one it uses. forge llm use claude switches back.`);
     return 0;
   }

@@ -5,7 +5,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { probe, llmSettings, modelsText, llmLabel } from '../../core/cli/llm.mjs';
+import { probe, llmSettings, modelsText, llmLabel, leadCapFor, leadWindow, HEADROOM } from '../../core/cli/llm.mjs';
+import { loadConfig } from '../../core/policy/lib/config.mjs';
 
 const SERVER = { url: 'https://gpu.example.com/llm', models: { opus: 'big', sonnet: 'big', haiku: 'small' } };
 const reply = (status, body) => ({ status, text: async () => (typeof body === 'string' ? body : JSON.stringify(body)) });
@@ -40,10 +41,10 @@ test('the probe says what is wrong: unreachable, the key refused, a model missin
   assert.deepEqual(levels(await probe(SERVER, 'k', fake({ '/llm/v1/models': down }))), ['fail: model server: https://gpu.example.com/llm cannot be reached: connect ECONNREFUSED 10.0.0.1:443']);
   assert.deepEqual(levels(await probe(SERVER, 'k', fake({ '/llm/v1/models': reply(401, { error: 'invalid api key' }) }))), ['fail: model server: https://gpu.example.com/llm refused the key (HTTP 401: invalid api key)']);
 
-  let rs = await probe(SERVER, 'k', { ...fake({ '/llm/v1/models': reply(200, { data: [{ id: 'big', max_model_len: 131072 }] }), '/llm/v1/messages': reply(400, { type: 'error', error: { message: '"auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set' } }) }), needContext: 200000 });
+  let rs = await probe(SERVER, 'k', { ...fake({ '/llm/v1/models': reply(200, { data: [{ id: 'big', max_model_len: 131072 }] }), '/llm/v1/messages': reply(400, { type: 'error', error: { message: '"auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set' } }) }) });
   assert.deepEqual(levels(rs), [
     'fail: model server: small not served at https://gpu.example.com/llm (it serves big)',
-    'warn: model server: big has a context of 131072 tokens and the lead compacts at 200000: a long session fails before then',
+    'warn: model server: a context of 131072 tokens is too small for the kit: the lead compacts at 100k at the least, and needs 112k of room above that (a 32k reply, a 80k jump such as loading tools)',
     'fail: model server: https://gpu.example.com/llm/v1/messages refused a tool call (HTTP 400: "auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set). vLLM takes tool calls when started with --enable-auto-tool-choice and a --tool-call-parser for the model',
   ]);
 
@@ -54,6 +55,26 @@ test('the probe says what is wrong: unreachable, the key refused, a model missin
   // A 404 that names the model is the model, not the endpoint.
   rs = await probe(SERVER, 'k', fake({ '/llm/v1/models': reply(404, ''), '/llm/v1/messages': reply(404, { error: { message: 'The model `big` does not exist.' } }) }));
   assert.match(rs[1].msg, /refused a tool call \(HTTP 404: The model `big` does not exist\.\)$/);
+});
+
+test('on a server the lead compacts 112k below the model\'s context, and lanes must fit too (decision 142)', async () => {
+  const budget = loadConfig(fs.mkdtempSync(path.join(os.tmpdir(), 'llm-budget-'))).config.budget;
+  assert.equal(HEADROOM, 112000, 'a 32k reply and an 80k jump such as loading tools');
+  assert.equal(leadCapFor(262144), 150000, "Qwen 3.8's 262,144");
+  assert.equal(leadCapFor(131072), 100000, 'never under Claude Code\'s 100k');
+  assert.equal(leadWindow({ context: 262144 }, budget), 150000);
+  assert.equal(leadWindow({ context: 1000000 }, budget), 200000, 'the budget\'s own point when the server has room');
+  assert.equal(leadWindow({}, budget), 200000, 'context not known');
+  assert.equal(llmSettings('gpu', { ...SERVER, context: 262144 }, '/k').compactAt, 150000);
+  assert.equal(llmSettings('gpu', SERVER, '/k').compactAt, null);
+
+  const models = reply(200, { data: [{ id: 'big', max_model_len: 262144 }, { id: 'small', max_model_len: 300000 }] });
+  const info = {};
+  let rs = await probe(SERVER, 'k', { ...fake({ '/llm/v1/models': models, '/llm/v1/messages': reply(200, {}) }), budget, info });
+  assert.equal(info.context, 262144, 'the smallest of the models');
+  assert.ok(rs.every((r) => r.level === 'ok'), JSON.stringify(rs));
+  rs = await probe(SERVER, 'k', { ...fake({ '/llm/v1/models': reply(200, { data: [{ id: 'big', max_model_len: 262144 }, { id: 'small', max_model_len: 262144 }] }), '/llm/v1/messages': reply(200, {}) }), budget: { ...budget, block: 180000 } });
+  assert.equal(rs[1].msg, 'model server: lanes stop at 180k (policy.budget.block), and a context of 262144 leaves room for 150k once a reply and a jump such as loading tools are counted: keep policy.budget.block at or below 150144');
 });
 
 test('forge sync writes the server, a model for each alias, no attribution block, auto mode\'s own checks and the key helper', () => {

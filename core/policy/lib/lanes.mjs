@@ -1,6 +1,7 @@
 // Lanes are subagents (their hook input carries agent_id). Lanes never spawn agents,
 // and each lane has a context budget and a "first edit" budget enforced before every call.
 import fs from 'node:fs';
+import path from 'node:path';
 import { deny } from './decision.mjs';
 import { readState, writeState } from './context.mjs';
 import { leadCompactAt } from './config.mjs';
@@ -78,6 +79,12 @@ export function laneFindings(input, ctx) {
   return out;
 }
 
+// Where Claude Code compacts the lead: the window forge sync wrote (lowered on a self-hosted model server, decision
+// 142), else the budget's.
+function compactAt(ctx) {
+  try { return JSON.parse(fs.readFileSync(path.join(ctx.mainRoot, '.claude', 'settings.local.json'), 'utf8')).autoCompactWindow || leadCompactAt(ctx.config.budget); } catch { return leadCompactAt(ctx.config.budget); }
+}
+
 // After each call: count calls and edits, and warn once the context passes the warning line.
 export function laneAfterCall(input, ctx) {
   const { warn, block, leadWarn } = ctx.config.budget;
@@ -89,7 +96,7 @@ export function laneAfterCall(input, ctx) {
     const due = s.calls - s.warnedAt >= 20;
     if (due) s.warnedAt = s.calls;
     writeState(ctx, 'lead.json', s);
-    return due ? `Lead context is ${k(tokens)} (handover line ${k(leadWarn)}). Bring .forge/handoffs/lead-handover.md up to date now (handover skill), then keep working: Claude Code compacts this conversation before it reaches ${k(leadCompactAt(ctx.config.budget))}, and you carry on from the handover. Do not stop to ask for /clear.` : null;
+    return due ? `Lead context is ${k(tokens)} (handover line ${k(leadWarn)}). Bring .forge/handoffs/lead-handover.md up to date now (handover skill), then keep working: Claude Code compacts this conversation before it reaches ${k(compactAt(ctx))}, and you carry on from the handover. Do not stop to ask for /clear.` : null;
   }
   const s = readState(ctx, laneFile(ctx.agentId), { calls: 0, edits: 0, warnedAt: -100, type: ctx.agentType, started: new Date().toISOString() });
   s.calls++;

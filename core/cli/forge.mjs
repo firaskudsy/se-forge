@@ -295,7 +295,7 @@ async function sync(main, o, env, out) {
   const pacing = machine.pacing === true;
   const server = llmFor({ stateDir: path.join(main, '.forge', 'state'), kitDir, cfg: machine, settings: readJson(path.join(main, '.claude', 'settings.local.json'), {}), managed: readJson(path.join(main, '.forge', 'state', 'settings-managed.json'), {}) });
   if (server.warn) out(`model server: ${server.warn}`);
-  const paced = applySettings(main, kitDir, { branches: [...new Set([config.branches.base, ...config.branches.promote, ...config.branches.protected])].filter((b) => !b.includes('*')), coAuthor: project.coAuthor, pacing, projectDir: folder, compactAt: leadCompactAt(config.budget), llm: server.settings ?? null });
+  const paced = applySettings(main, kitDir, { branches: [...new Set([config.branches.base, ...config.branches.promote, ...config.branches.protected])].filter((b) => !b.includes('*')), coAuthor: project.coAuthor, pacing, projectDir: folder, compactAt: Math.min(leadCompactAt(config.budget), server.settings?.compactAt ?? Infinity), llm: server.settings ?? null });
   writeJson(path.join(main, '.forge', 'state', 'pacing.json'), { enabled: paced });
   if (pacing && !paced) out('pacing: .claude/settings.local.json has a status line of your own; remove it and run forge sync to use pacing');
   installGitHooks(main, kitDir);
@@ -554,7 +554,7 @@ async function doctor(env, cwd, out) {
   else check('info', pace.level === 'off' ? `pacing off: ${pace.why}` : pace.level === 'unknown' ? `pacing on: ${pace.why}` : `pacing on: ${pace.level}, ${pace.text} (recorded ${pace.age}s ago)`);
   if (folder) {
     const { config, project } = loadConfig(main, env);
-    for (const r of await llmDoctor({ stateDir, kitDir: path.join(main, '.forge', 'kit'), cfg: machine, settings, managed: readJson(path.join(stateDir, 'settings-managed.json'), {}), models: project.models, needContext: leadCompactAt(config.budget), env })) check(r.level, r.msg);
+    for (const r of await llmDoctor({ stateDir, kitDir: path.join(main, '.forge', 'kit'), cfg: machine, settings, managed: readJson(path.join(stateDir, 'settings-managed.json'), {}), models: project.models, budget: config.budget, env })) check(r.level, r.msg);
   }
   check('info', 'server gates are not checked automatically yet: follow core/server/<host>.md');
   return report(results, out);
@@ -794,7 +794,7 @@ async function run(argv, env, cwd, out, failed) {
         let m = null;
         try { m = checkout(cwd).main; } catch { /* the list, add and remove work anywhere */ }
         const c = m ? loadConfig(m, env) : null;
-        return await llm(o, { env, cwd, out, cfgFile: userConfigFile(env), main: m, sync: () => sync(m, {}, env, out), needContext: c ? leadCompactAt(c.config.budget) : undefined, models: c?.project.models });
+        return await llm(o, { env, cwd, out, cfgFile: userConfigFile(env), main: m, sync: () => sync(m, {}, env, out), budget: c?.config.budget, models: c?.project.models });
       }
       case 'dashboard': {
         const { main: m } = checkout(cwd);

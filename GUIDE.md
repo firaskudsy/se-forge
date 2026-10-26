@@ -711,6 +711,8 @@ forge llm add qwen --url https://gpu.example.com/llm --model Qwen/Qwen3.8-27B --
   (`security add-generic-password -U -s se-forge-llm-qwen -a "$USER" -T /usr/bin/security -w`, which asks for it)
   or the Linux keyring (`secret-tool store --label="se-forge model server qwen" service se-forge-llm-qwen`). The
   Keychain wins, then the keyring, then the file. A server that takes no key still needs one stored: any word.
+- `--context`: the model's context in tokens, for a server that doesn't report it. vLLM reports it in `/v1/models`,
+  and `add` (or `use`) saves that figure.
 
 `add` checks the server at once: reachable with the key, serving the models, its context, a tool call. `forge llm`
 lists the servers this machine knows and where each key is (never the key); `forge llm remove <name>` forgets one.
@@ -735,6 +737,9 @@ overwrite them.
 - The dashboard names the server next to the kit version, and its charts show the server's model. For a cost, add
   the model to `project.prices` under its full name (`"Qwen/Qwen3.8-27B": { … }`), at zero or what it costs you.
 - A server may not report cache hits: the dashboard then counts every token as new.
+- The lead compacts earlier (decision 142): at the model's context less 112k, that is a 32k reply and an 80k jump
+  such as loading a set of tools mid-session. On a 262k server that is 150k instead of 200k. Keep lanes'
+  `policy.budget.block` at or below the same figure; `forge doctor` says when the budget doesn't fit the server.
 - One session talks to one server, so every tier runs there.
 - In auto mode the check that lets routine steps run without a prompt is made by the server's model, not Claude's.
   The kit's own refusals and approvals do not depend on the model.

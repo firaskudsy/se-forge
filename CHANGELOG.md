@@ -21,6 +21,12 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
   itself, and without it auto mode holds the session on a notice about them.
 
 ### Fixed
+- **On a self-hosted model server the lead compacts with room to spare** (decision 142). budget-guru's lead on Qwen
+  (262,144 tokens) was at 150k when it loaded three Figma tools; their definitions added about 80k at once, and with
+  the 32k Claude Code asks for a reply the next request was refused (`maximum context length is 262144 tokens`).
+  `forge llm add` and `forge llm use` now save the server's context (vLLM reports it; `--context <tokens>` for
+  others), and `forge sync` compacts the lead 112k below it: at 150k on a 262k server. `forge doctor` names the point,
+  and warns when the context is too small or `policy.budget.block` leaves lanes no room for such a jump.
 - `forge timeline` listed Claude Code's own short helpers, which report a stop with no role, no start and no
   transcript, as hundreds of agents "running or cut off" (`agent ×447`). They are counted apart now ("and 451 of
   Claude Code's own helpers, which nobody spawned"), and the dashboard leaves them out of every agent count.

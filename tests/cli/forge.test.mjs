@@ -556,10 +556,11 @@ test('forge llm: add keeps the server on this machine and the key in a private f
     assert.match(r.out, /✓ model server: Qwen\/Qwen3\.8-27B takes tool calls/);
     assert.equal(fs.statSync(w.keyFile).mode & 0o777, 0o600);
     const cfg = JSON.parse(fs.readFileSync(w.env.FORGE_USER_CONFIG, 'utf8'));
-    assert.deepEqual(cfg.llm.gpu, { url: s.url, models: { opus: 'Qwen/Qwen3.8-27B', sonnet: 'Qwen/Qwen3.8-27B', haiku: 'Qwen/Qwen3.8-27B' } }, 'the address without /v1');
+    assert.deepEqual(cfg.llm.gpu, { url: s.url, models: { opus: 'Qwen/Qwen3.8-27B', sonnet: 'Qwen/Qwen3.8-27B', haiku: 'Qwen/Qwen3.8-27B' }, context: 262144 }, 'the address without /v1, the context the server reports');
+    assert.match(r.out, /context: 262144 tokens; the lead compacts at 150k on it/);
     assert.equal(cfg.pacing, true, 'the rest of the machine settings stay');
     r = w.forge(['llm']);
-    assert.match(r.out, /- gpu: http:\/\/127\.0\.0\.1:\d+\/gpu\/llm, Qwen\/Qwen3\.8-27B for opus, sonnet and haiku; key: file .*llm-gpu-key\nThis checkout runs on Claude\./);
+    assert.match(r.out, /- gpu: http:\/\/127\.0\.0\.1:\d+\/gpu\/llm, Qwen\/Qwen3\.8-27B for opus, sonnet and haiku, context 262144; key: file .*llm-gpu-key\nThis checkout runs on Claude\./);
 
     r = w.forge(['llm', 'use', 'gpu']);
     assert.equal(r.code, 0, r.out);
@@ -568,6 +569,8 @@ test('forge llm: add keeps the server on this machine and the key in a private f
     assert.equal(w.settings().env.ANTHROPIC_DEFAULT_HAIKU_MODEL, 'Qwen/Qwen3.8-27B');
     assert.equal(w.settings().env.CLAUDE_CODE_ATTRIBUTION_HEADER, '0');
     assert.match(w.settings().apiKeyHelper, /^node ".*\/\.forge\/kit\/core\/cli\/llm-key\.mjs" gpu$/);
+    assert.equal(w.settings().autoCompactWindow, 150000, 'the lead compacts 112k below the server\'s context (decision 142)');
+    assert.match(r.out, /The lead compacts at 150k on gpu \(a context of 262144, less 112k of room\)\./);
     assert.ok(w.settings().hooks, 'the safety hooks stay');
     assert.equal(gitClean(w.client), '', 'nothing is visible to git');
     for (const out of [r.out, w.forge(['llm']).out, JSON.stringify(w.settings())]) assert.ok(!out.includes('fake-llm-key'), 'the key is never printed or written there');
@@ -582,6 +585,7 @@ test('forge llm: add keeps the server on this machine and the key in a private f
     assert.match(r.out, /✓ model server: key from file .*llm-gpu-key/);
     assert.match(r.out, /✓ model server: Qwen\/Qwen3\.8-27B takes tool calls/);
     assert.match(r.out, /· pacing off: this checkout runs on the model server gpu \(forge llm\), which has no plan windows/);
+    assert.match(r.out, /✓ model server: the lead compacts at 150k there \(a context of 262144, less 112k for a reply and a jump such as loading tools\)/);
     assert.doesNotMatch(r.out, /pacing is on for you but not in this checkout/);
 
     // A server the machine no longer knows: sync says so and the checkout runs on Claude.
@@ -595,6 +599,7 @@ test('forge llm: add keeps the server on this machine and the key in a private f
     assert.equal(r.code, 0, r.out);
     assert.match(r.out, /This checkout runs on Claude again \(it was gpu\)/);
     assert.equal(w.settings().apiKeyHelper, undefined);
+    assert.equal(w.settings().autoCompactWindow, 200000, 'back to the budget\'s own point');
     assert.equal(w.forge(['llm', 'use', 'claude']).out.trim(), 'This checkout runs on Claude already.');
   } finally { s.stop(); }
 });
@@ -610,7 +615,8 @@ test('forge llm: doctor says what the server lacks (tool calls, room for the lea
     r = w.forge(['doctor']);
     assert.equal(r.code, 1);
     assert.match(r.out, /✗ model server: http:.*\/gpu\/llm\/v1\/messages refused a tool call \(HTTP 400: "auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set\)\. vLLM takes tool calls when started with --enable-auto-tool-choice/);
-    assert.match(r.out, /! model server: Qwen\/Qwen3\.8-27B has a context of 131072 tokens and the lead compacts at 200000/);
+    assert.match(r.out, /! model server: a context of 131072 tokens is too small for the kit/);
+    assert.match(r.out, /✓ model server: the lead compacts at 100k there/);
     fs.writeFileSync(w.keyFile, 'wrong-key\n', { mode: 0o600 });
     assert.match(w.forge(['doctor']).out, /✗ model server: http:.* refused the key \(HTTP 401: invalid api key\)/);
     fs.chmodSync(w.keyFile, 0o644);
