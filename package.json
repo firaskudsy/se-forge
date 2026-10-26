@@ -1,6 +1,6 @@
 {
   "name": "se-forge",
-  "version": "0.2.37",
+  "version": "0.2.38",
   "private": true,
   "license": "MIT",
   "description": "Shared AI kit for full-stack client projects",

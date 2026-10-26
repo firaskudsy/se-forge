@@ -8,6 +8,8 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ## [Unreleased]
 
+## [0.2.38] - 2026-10-26
+
 ### Added
 - **`forge llm`: agents on a self-hosted model server instead of Claude** (decision 140, GUIDE.md H). `forge llm add
   <name> --url <address> --model <model> [--key-file <file>]` keeps a server in this machine's settings (never in the
