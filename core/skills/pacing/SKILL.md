@@ -1,6 +1,6 @@
 ---
 name: pacing
-description: Pause safely when the Claude plan's usage window is nearly used up, and resume at the reset. Only where the developer turned pacing on (forge setup --pacing on) and only on a Claude subscription, never with an API key. Use when a hook reports [pacing:pause] or [pacing].
+description: Pause safely when the Claude plan's usage window is nearly used up, and resume at the reset. Only where the developer turned pacing on (forge setup --pacing on) and only on a Claude subscription, never with an API key or on a self-hosted model server (forge llm). Use when a hook reports [pacing:pause] or [pacing].
 ---
 
 # Pause and resume at the usage reset (lead)

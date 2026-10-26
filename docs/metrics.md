@@ -108,6 +108,10 @@ later and see older work at the new prices. The price list has two cache-write p
 the 1-hour cache: copy both. A model without a price shows "no price for …". `forge config check` checks the
 shape.
 
+A checkout on a self-hosted model server (`forge llm`, GUIDE.md H) records the server's model under its own name,
+for example `Qwen/Qwen3.8-27B`: give it a price under that name, at zero or what the server costs you, to see it in
+dollars. Such a server may not report cache reads; its tokens then all count as new.
+
 ### How "waiting for you" is measured
 - **After the lead stopped:** from its turn ending to your next message.
 - **Permission prompts:** Claude Code starts a tool's clock after you answer, so the gap between a call's start and the start of its run is your answer time (counted from 5 seconds).
