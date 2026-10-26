@@ -12,7 +12,7 @@ import { readStories, readCatalogue, readPlans, readMetrics, reviewRounds, readM
 import { union, subtract, length, timeSplit, rework, friction, roles, progress, projectTimeline, SILENT_MS, stageOf, composition, daily, groupBy, replies } from '../../core/cli/dashboard/measures.mjs';
 import { stackedBars, columns, dayStrips, step } from '../../core/cli/dashboard/svg.mjs';
 import { day, weekday, hour, clock, when } from '../../core/cli/dashboard/format.mjs';
-import { kitText } from '../../core/cli/dashboard/page.mjs';
+import { kitText, totals, splitText } from '../../core/cli/dashboard/page.mjs';
 import { importHistory, refusalRule } from '../../core/cli/timeline-import.mjs';
 import { record } from '../../core/cli/shot.mjs';
 
@@ -151,6 +151,23 @@ test('chart 10: rework starts at the first review round with a blocker', () => {
 });
 
 const PRICES = { opus: { input: 10, cacheWrite5m: 12, cacheWrite1h: 20, cacheRead: 1, output: 50 }, sonnet: { input: 2, cacheWrite5m: 2.5, cacheWrite1h: 4, cacheRead: 0.2, output: 10 } };
+
+test('the totals split the tokens into re-read, new and output, in tokens and in dollars', () => {
+  const at = '2026-10-09T08:00:00.000Z';
+  const lines = [
+    { at, event: 'reply', reply: 'r1', model: 'claude-opus-5-5', input: 10, cacheWrite5m: 1000, cacheWrite1h: 0, cacheRead: 90000, output: 2000, tokens: 93010 },
+    { at, event: 'tool.done', reply: 'r1', model: 'claude-opus-5-5', cacheRead: 90000, tokens: 93010 },
+    { at, event: 'reply', reply: 'r2', model: 'claude-opus-5-5', input: 0, cacheWrite5m: 0, cacheWrite1h: 990, cacheRead: 6000, output: 0, tokens: 6990 },
+  ];
+  const priced = totals({ lines, prices: PRICES, money: true });
+  assert.deepEqual(Object.fromEntries(Object.entries(priced.split).map(([k, v]) => [k, v.tokens])), { reread: 96000, fresh: 2000, output: 2000 }, 'each reply once');
+  assert.equal(splitText(priced), '96.0k re-read (96%) · 2.0k new · 2.0k output');
+  assert.equal(splitText(priced, 'cost', ' + '), '$0.10 re-read (42%) + $0.03 new + $0.10 output', 'the cache reads are most of the tokens, not of the cost');
+  const plain = totals({ lines, prices: {}, money: false });
+  assert.equal(splitText(plain), '96.0k re-read (96%) · 2.0k new · 2.0k output');
+  assert.equal(splitText(plain, 'cost'), '', 'no prices, no dollars');
+  assert.equal(splitText(totals({ lines: [], prices: {}, money: false })), '', 'no tokens yet');
+});
 
 test('charts 7 and 11: tokens and cost by role and model, largest first; refusals and failures by role', () => {
   const r = roles(LINES);
@@ -369,6 +386,8 @@ test('forge dashboard: one page with fifteen charts, the architecture, the scree
   assert.match(html, /<path class="mark"[^>]*><title>#10 Data model merged/);
   assert.match(html, /Tokens shown: add prices to project\.json/);
   assert.match(html, /Opus share of tokens<\/span><b>71%<\/b>/);
+  assert.match(html, /<span>Tokens<\/span><b>[\d.]+k<\/b><small>[\d.]+[kM]? re-read \(\d+%\) · [\d.]+[kM]? new · [\d.]+[kM]? output<\/small>/, 'the tokens by kind under the total');
+  assert.match(html, /<span>API cost<\/span><b>no prices set<\/b><\/div>/);
   assert.match(html, /Tickets merged<\/span><b>2 of 3<\/b>/);
   assert.match(html, /Stories done<\/span><b>2 of 3<\/b>/, 'E1-S1 (#10) and E1-S2 (#11) are done; E2-S1 waits for #12');
   assert.match(html, /est 2–4 h · actual 1\.5 h · db/);
@@ -388,6 +407,7 @@ test('forge dashboard: one page with fifteen charts, the architecture, the scree
   for (const title of ['Cost per ticket, by model', 'Cost per ticket, by stage', 'Spend per day']) assert.ok(priced.includes(title), title);
   assert.doesNotMatch(priced, /Tokens shown/);
   assert.match(priced, /Opus share of cost<\/span><b>\d+%<\/b>/);
+  assert.match(priced, /<span>API cost<\/span><b>[^<]+<\/b><small>[^<]+ re-read \(\d+%\) · [^<]+ new · [^<]+ output<\/small>/, 'and the cost by kind under its total');
   const one = spawnSync('node', [FORGE, 'dashboard', '--offline', '--no-open', '--out', out, '--ticket', '11'], { cwd: w.client, encoding: 'utf8' });
   assert.match(one.stdout, /1 tickets/);
   const eleven = fs.readFileSync(out, 'utf8');
@@ -451,7 +471,7 @@ test('forge dashboard --text: the page\'s numbers as text, what to look at, and 
   assert.match(text, /^acme: progress on \d\d \w{3}, \d+:\d\d [AP]M\n\n/);
   assert.match(text, /\nTickets merged: 2 of 3 · stories done: 2 of 3\n/, 'the same totals as the page');
   assert.match(text, /\nWorking time: \d+[hm][^·]* · waiting for you: 28m\n/);
-  assert.match(text, /\nTokens: [\d.]+k · API cost: no prices set · Opus share of tokens: \d+% · agents: \d+\n/);
+  assert.match(text, /\nTokens: [\d.]+k = [\d.]+[kM]? re-read \(\d+%\) \+ [\d.]+[kM]? new \+ [\d.]+[kM]? output · API cost: no prices set · Opus share of tokens: \d+% · agents: \d+\n/);
   assert.match(text, /\nForecast: too early, it needs at least 3 merged tickets with a timeline \(2 so far\)\.\n/);
   assert.match(text, /\nScope: 3 tickets from the bootstrap\.\n/, 'nothing added since');
   assert.match(text, /\nOpen \(1\):\n- #12 Book page · blocked on #30 \(the API lacks the slot's doctor\) · est 0\.75–1\.5 h · 2h 00m so far \(nobody 2h 00m\) · 2 review rounds, 2 with blockers · 2 agents · [\d.]+k tokens\n/);

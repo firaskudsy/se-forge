@@ -181,7 +181,7 @@ work in 38.6 hours from the first line to the last, beside 13 h 07 min waiting f
 6. **Cost per ticket, by model,** with the estimate (the plan's, else `metrics.md`'s, else the bootstrap draft's), your hours and the areas.
 7. **Cost per ticket, by stage:** planning (planner, analysts, architect, designer), building (the engineers), reviews (the reviewers and the spec checker), QA, the lead, other.
 8. **Who spends it, on which model:** each role split by model, largest first, with the running share and the cost of one spawn.
-9. **What the cost is made of:** each model by token kind (input, 5-minute and 1-hour cache writes, cache reads, output), with the share of cache reads and output.
+9. **What the cost is made of:** each model by token kind (new: input, 5-minute and 1-hour cache writes; re-read: cache reads; output), with the share of cache reads and output.
 10. **Spend per day,** by model.
 
 **Quality**
@@ -242,7 +242,10 @@ first, and the lead's own turns for the ticket last. The rows add up to the tick
 with the status, and the tokens per model and per stage.
 
 The KPIs include the Opus share of the cost (or of the tokens) and the time the project waited for you, each
-wait counted once. How the numbers are made:
+wait counted once. Under **Tokens** (and **API cost**, with prices) the total is split three ways: **re-read**, the
+conversation so far that every reply sends again and the cache serves cheaply (cache reads, usually over 90% of the
+tokens but a small part of the cost); **new**, what was added to it (input and cache writes); and **output**, what
+the model wrote, its thinking included. `forge dashboard --text` prints the same split. How the numbers are made:
 - **A ticket** runs from its first line to its merge on `dev`; the lead's lines without a ticket count for every ticket running at that moment; the project manager is overhead, not a ticket's work.
 - **Nobody working:** a stretch of 15 minutes with no line and no tool running (a laptop asleep), also inside an agent's or the lead's turn. In chart 1 the lead also does not work while it waits for you.
 - **The hours across chart 1** are the hours of the day anything happened on any day, at least two; a day with no line has no row.

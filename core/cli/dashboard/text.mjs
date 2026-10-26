@@ -1,7 +1,7 @@
 // forge dashboard --text (decision 113): the dashboard's numbers as plain text, for the lead's progress report
 // (skill progress-report) and for a terminal. It reads the same model as the page, so the report and the page
 // agree, and it writes no file.
-import { totals, kitText, dollars, range, pct } from './page.mjs';
+import { totals, splitText, kitText, dollars, range, pct } from './page.mjs';
 import { SILENT_MS, WAIT_KINDS, agentCount } from './measures.mjs';
 import { day, when } from './format.mjs';
 import { countsText } from './issues.mjs';
@@ -69,7 +69,8 @@ export function renderText(m, { project }) {
 
   out.push(`Tickets merged: ${p.ticketsDone.length} of ${p.totalTickets} · stories done: ${p.totalStories ? `${p.storiesDone.length} of ${p.totalStories}` : 'no story list'}`);
   out.push(`Working time: ${duration(sums.working)} · waiting for you: ${duration(sums.waiting)}`);
-  out.push(`Tokens: ${fmt(sums.tokens)} · API cost: ${money ? dollars(sums.cost) : 'no prices set'} · Opus share of ${money ? 'cost' : 'tokens'}: ${pct(sums.opusShare)} · agents: ${sums.agents}`);
+  const parts = (of) => (splitText(sums, of, ' + ') ? ` = ${splitText(sums, of, ' + ')}` : '');
+  out.push(`Tokens: ${fmt(sums.tokens)}${parts('tokens')} · API cost: ${money ? `${dollars(sums.cost)}${parts('cost')}` : 'no prices set'} · Opus share of ${money ? 'cost' : 'tokens'}: ${pct(sums.opusShare)} · agents: ${sums.agents}`);
   // Decision 137: how many agents had a skill to work from, preloaded or opened itself.
   const sk = m.skills;
   if (sk?.runs.length) out.push(`Skills: ${sk.runs.filter((r) => r.preloaded.length || r.loaded.size).length} of ${sk.runs.length} agents had one (${sk.skills.reduce((x, k) => x + k.loads, 0)} opened, ${sk.skills.reduce((x, k) => x + k.preloads, 0)} preloaded); ${sk.skills.length}${sk.available ? ` of ${sk.available}` : ''} skills used.`);

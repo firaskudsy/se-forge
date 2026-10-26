@@ -116,19 +116,34 @@ export function kitText(k) {
   return `se-forge ${k.active}${pin}${cli}`;
 }
 
+// The token kinds in three groups: what each reply re-reads from the cache (the conversation so far, sent again),
+// what is new in it (input and cache writes), and what the model writes (output, its thinking included).
+export const SPLIT = [['reread', 're-read', ['cacheRead']], ['fresh', 'new', ['input', 'cacheWrite5m', 'cacheWrite1h']], ['output', 'output', ['output']]];
+export const SPLIT_HINT = 'Re-read: the conversation so far, which every reply sends again and the cache serves cheaply. New: what was added to it (input and cache writes). Output: what the model wrote, its thinking included.';
+
 // The totals above the tabs; forge dashboard --text prints the same ones.
 export function totals(m) {
   const rs = replies(m.lines, m.prices);
   const value = (r) => (m.money ? r.cost || 0 : r.tokens);
   const all = rs.reduce((x, r) => x + value(r), 0);
+  const sum = (of, keys) => rs.reduce((s, r) => s + (r[of] ? keys.reduce((x, k) => x + r[of][k], 0) : 0), 0);
   return {
     tokens: rs.reduce((s, r) => s + r.tokens, 0),
     cost: rs.reduce((s, r) => s + (r.cost || 0), 0),
+    split: Object.fromEntries(SPLIT.map(([k, , keys]) => [k, { tokens: sum('parts', keys), cost: sum('partCost', keys) }])),
     opusShare: all ? rs.filter((r) => r.family === 'opus').reduce((x, r) => x + value(r), 0) / all : 0,
     working: m.timeline?.working || 0,
     waiting: m.timeline?.waiting || 0,
     agents: m.lines.filter((e) => e.event === 'agent.start').length,
   };
+}
+
+// "95.8M re-read (93%) · 5.6M new · 2.2M output", or the same in dollars; '' before any tokens.
+export function splitText(sums, of = 'tokens', sep = ' · ') {
+  const total = SPLIT.reduce((x, [k]) => x + sums.split[k][of], 0);
+  if (!total) return '';
+  const show = of === 'cost' ? dollars : fmt;
+  return SPLIT.map(([k, label], i) => `${show(sums.split[k][of])} ${label}${i === 0 ? ` (${pct(sums.split[k][of] / total)})` : ''}`).join(sep);
 }
 
 export function renderPage(m, { project }) {
@@ -143,8 +158,8 @@ export function renderPage(m, { project }) {
   const kpis = [
     ['Tickets merged', `${p.ticketsDone.length} of ${p.totalTickets}`],
     ['Stories done', p.totalStories ? `${p.storiesDone.length} of ${p.totalStories}` : 'no story list'],
-    ['Tokens', fmt(sums.tokens)],
-    ['API cost', money ? dollars(sums.cost) : 'no prices set'],
+    ['Tokens', fmt(sums.tokens), splitText(sums)],
+    ['API cost', money ? dollars(sums.cost) : 'no prices set', money ? splitText(sums, 'cost') : ''],
     ['Working time', duration(sums.working)],
     ['Waiting for you', duration(sums.waiting)],
     [money ? 'Opus share of cost' : 'Opus share of tokens', pct(sums.opusShare)],
@@ -211,7 +226,7 @@ export function renderPage(m, { project }) {
   const cStages = stageRows.length ? stackedBars({ rows: stageRows.map((r) => { const total = STAGES.reduce((x, [k]) => x + r.parts[k], 0); const review = r.parts.review; return { label: r.label, parts: r.parts, right: `${amount(total)} · reviews ${pct(total ? review / total : 0)}` }; }), keys: STAGE_KEYS, fmt: amount }) : '<p class="empty">No tokens recorded yet.</p>';
 
   // Chart 5: what the cost is made of, each model by token kind.
-  const KINDS = [{ key: 'input', label: 'Input', cls: 'k-input' }, { key: 'cacheWrite5m', label: 'Cache write (5 min)', cls: 'k-cw5' }, { key: 'cacheWrite1h', label: 'Cache write (1 hour)', cls: 'k-cw1' }, { key: 'cacheRead', label: 'Cache read', cls: 'k-cr' }, { key: 'output', label: 'Output', cls: 'k-output' }];
+  const KINDS = [{ key: 'input', label: 'New: input', cls: 'k-input' }, { key: 'cacheWrite5m', label: 'New: cache write (5 min)', cls: 'k-cw5' }, { key: 'cacheWrite1h', label: 'New: cache write (1 hour)', cls: 'k-cw1' }, { key: 'cacheRead', label: 'Re-read: cache read', cls: 'k-cr' }, { key: 'output', label: 'Output', cls: 'k-output' }];
   const comp = composition(m.lines, m.prices);
   const compRows = FAMILIES.filter(([f]) => comp[f]).map(([f, l]) => { const c = comp[f]; const shown = money && c.priced ? c.cost : c.tokens; const total = PARTS.reduce((x, k) => x + (shown[k] || 0), 0); return { label: l, parts: shown, right: `${amount(total)}${money && !c.priced ? ' (tokens: no price for it)' : ''} · cache reads ${pct(total ? (shown.cacheRead || 0) / total : 0)}, output ${pct(total ? (shown.output || 0) / total : 0)}` }; });
   const cComp = compRows.length ? stackedBars({ rows: compRows, keys: KINDS, fmt: amount, rightW: 300 }) : '<p class="empty">No tokens recorded yet.</p>';
@@ -334,7 +349,7 @@ export function renderPage(m, { project }) {
 @media (prefers-color-scheme: dark){:root{--bg:#141413;--card:#1e1e1c;--fg:#ececea;--dim:#9a9a94;--line:#33332f;--idle:#45453f;--shot:#3bc9db}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
 main{max-width:1100px;margin:0 auto;padding:24px 16px 48px}h1{font-size:22px;margin:0 0 2px}.sub{color:var(--dim);margin:0 0 18px}
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:18px}.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px}.kpi b{display:block;font-size:20px}.kpi span{color:var(--dim);font-size:12px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:18px}.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px}.kpi b{display:block;font-size:20px}.kpi span{color:var(--dim);font-size:12px}.kpi small{display:block;color:var(--dim);font-size:11px;margin-top:2px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:16px}h2{font-size:16px;margin:0}.num{display:inline-block;width:22px;height:22px;border-radius:11px;background:var(--fg);color:var(--card);text-align:center;font-size:12px;line-height:22px;margin-right:8px}
 .q{color:var(--dim);margin:4px 0 10px}h3{font-size:13px;margin:14px 0 4px}.list{margin:0;padding-left:20px}.dim{color:var(--dim)}.empty{color:var(--dim);font-style:italic}.fc{margin:6px 0 10px}.hint{color:var(--waiting);font-size:12px;margin:0 0 6px}
 .chart{width:100%;height:auto;display:block}.chart text{fill:var(--fg);font-size:11px}.chart .axis{fill:var(--dim);font-size:10px}.chart .note{fill:var(--dim)}.chart .grid{stroke:var(--line)}
@@ -360,7 +375,7 @@ footer{color:var(--dim);font-size:12px}footer p{margin:4px 0}
 .status{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:999px;padding:4px 12px;margin:0 0 10px;font-weight:600}.status i{width:9px;height:9px;border-radius:50%;background:var(--idle)}.status.up i{background:var(--i-closed)}.status.down i{background:var(--dim)}
 </style></head><body><main>
 <h1>${esc(project)}</h1><p class="sub">${m.since > 0 ? `Last ${Math.round((m.now - m.since) / (24 * H))} days` : 'Whole project'} · built ${esc(when(m.now))} · ${m.table.length} tickets${kitText(m.kit) ? ` · ${esc(kitText(m.kit))}` : ''}${m.watch ? ` · <span id="watch">watching: a new page every ${m.watch.every} min, and this one reloads itself</span>` : ''}</p>
-<div class="kpis">${kpis.map(([k, v]) => `<div class="kpi"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}</div>
+<div class="kpis">${kpis.map(([k, v, more]) => `<div class="kpi"${more ? ` title="${esc(SPLIT_HINT)}"` : ''}><span>${esc(k)}</span><b>${esc(v)}</b>${more ? `<small>${esc(more)}</small>` : ''}</div>`).join('')}</div>
 <nav class="tabs" role="tablist" aria-label="Dashboard sections">${TABS.map(([id, l], i) => `<button type="button" role="tab" id="tab-btn-${id}" aria-controls="tab-${id}" aria-selected="${i === 0}" data-tab="${id}">${esc(l)}${id === 'screens' && m.shots.length ? `<span class="count">${m.shots.length}</span>` : ''}</button>`).join('')}</nav>
 ${panel('overview', `${card(1, 'The project over time', 'Where did the work wait for you? Each day across, in the hours anything happened: the top lane is the AI at work, the bottom lane each wait for you, by kind. Blank in both is nobody working; a triangle is a merge, a camera a screenshot (click it to see it).', legend([...AI, ...kinds, MARK, ...SHOT]) + cDays + kindsText)}
 ${card(2, 'Progress and forecast', 'When will the project be done, and what will it cost?', c6a + fcText + c6b)}

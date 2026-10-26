@@ -447,7 +447,8 @@ the project's stories, tickets, plans and estimates, review rounds and merges, a
 GitLab for chart 3 (`--offline` skips that and uses the last read; the first read of a project takes a few seconds
 per ten issues, later ones only fetch what changed). The page itself needs no internet. The
 totals stay on top (among them **Working time**: the AI at work, without the waits for you and without the
-stretches when nothing happened, such as a laptop asleep), and the charts, the app's screenshots and the tickets are
+stretches when nothing happened, such as a laptop asleep; and **Tokens**, split into re-read from the cache, new and
+output, so a large total is not mistaken for a large bill), and the charts, the app's screenshots and the tickets are
 in nine tabs:
 
 | Tab | Chart | Look for |
@@ -461,7 +462,7 @@ in nine tabs:
 | Cost | 6. Cost per ticket, by model | tickets far above others of their size; a lot of Opus where Sonnet would do |
 | | 7. Cost per ticket, by stage | planning, building, reviews, QA, the lead: a stage that dominates every ticket |
 | | 8. Who spends it, on which model | the roles to make cheaper first, and what one spawn of each costs |
-| | 9. What the cost is made of | per model: input, cache writes, cache reads, output; cache reads are most of the tokens but cheap |
+| | 9. What the cost is made of | per model: new (input, cache writes), re-read (cache reads), output; cache reads are most of the tokens but cheap |
 | | 10. Spend per day | days that cost far more than the work done on them |
 | Quality | 11. Rework | what everything after the first review blocker cost |
 | | 12. Friction map | refusals and failures by role: the role or skill to fix, and refusals that should not happen |

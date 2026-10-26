@@ -8,6 +8,14 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ## [Unreleased]
 
+### Changed
+- **`forge dashboard` splits the tokens three ways:** under the Tokens total (and the API cost, when `project.prices`
+  is set) the page shows what was **re-read** from the cache, what was **new** (input and cache writes) and the
+  **output**, with the re-read share, e.g. `98.7M re-read (93%) · 5.7M new · 2.2M output`. Every reply sends the
+  conversation so far again, so cache reads are most of a project's tokens but a small part of its cost. `forge
+  dashboard --text` prints the same split (`Tokens: 106.6M = 98.7M re-read (93%) + 5.7M new + 2.2M output`), and
+  chart 9's legend uses the same words.
+
 ## [0.2.36] - 2026-10-25
 
 ### Added
