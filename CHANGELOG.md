@@ -8,6 +8,8 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ## [Unreleased]
 
+## [0.2.40] - 2026-10-28
+
 ### Added
 - **Where the project is, on the dashboard** (decision 143). Between the totals and the tabs, a row of eleven
   steps: the bootstrap's nine stages (Discovery, Stories, Architecture, Screens, Contract, Tickets, Panel, Your
