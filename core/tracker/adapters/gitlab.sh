@@ -130,7 +130,7 @@ tr_create() {
   fi
   for label in "${labels[@]}"; do gl_label "$label"; done
   url="$(gl_read issue create --title "$tk_subject" --description "$tk_desc" --label "$joined" ${links[@]+"${links[@]}"} --yes \
-    | grep -Eo 'https?://[^ ]+/-/issues/[0-9]+' | tail -n 1)" || return 1
+    | grep -Eo 'https?://[^ ]+/-/(issues|work_items)/[0-9]+' | tail -n 1)" || return 1
   [[ -n "$url" ]] || { echo "tracker(gitlab): glab printed no issue URL" >&2; return 1; }
   printf 'created #%s  %s\n' "${url##*/}" "$url"
   if [[ -n "$tk_board" ]]; then gl_place "${url##*/}" "$tk_board" "$tk_column"; fi

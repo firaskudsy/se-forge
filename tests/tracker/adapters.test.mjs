@@ -22,7 +22,7 @@ if (tool === 'glab') {
   if (has('issue', 'view')) out({ iid: 12, title: 'Login', state: process.env.FAKE_STATE || 'opened', labels: ['status::Todo', 'type::Task'], assignees: [], web_url: 'https://gitlab.example.com/g/p/-/issues/12', description: 'desc' });
   else if (has('label', 'list')) out([{ name: 'status::Todo' }, { name: 'status::In Testing' }, { name: 'type::Task' }]);
   else if (has('issue', 'list')) out([{ iid: 12, title: 'Login', labels: ['status::Todo'], state: 'opened', assignees: [{ username: 'amal' }], created_at: '2026-10-07T08:00:00Z', updated_at: '2026-10-07T09:00:00Z', author: { username: 'amal' }, web_url: 'https://gitlab.example.com/g/p/-/issues/12' }]);
-  else if (has('issue', 'create')) out('Creating issue in g/p\nhttps://gitlab.example.com/g/p/-/issues/34');
+  else if (has('issue', 'create')) out('Creating issue in g/p\nhttps://gitlab.example.com/g/p/-/' + (process.env.FAKE_PATH || 'issues') + '/34');
   else if (has('api')) out([{ id: 1, name: 'Issues', lists: [{ label: { name: 'Pending' } }] }]);
 } else {
   if (has('issue', 'view') && a.includes('labels,state')) out({ labels: [{ name: 'status:Todo' }], state: process.env.FAKE_STATE || 'OPEN' });
@@ -93,6 +93,12 @@ test('gitlab: create links, labels and places the card', () => {
   assert.match(r.out, /created #34 {2}https:\/\/gitlab\.example\.com\/g\/p\/-\/issues\/34\ncard placed in 'Pending' \(label Pending\)/);
   assert.ok(writes(r.calls).includes('issue create --title [Backend request] add email --description body --label type::Task,status::Todo --linked-issues 12 --link-type relates_to --yes'));
   assert.ok(writes(r.calls).includes('issue update 34 --label Pending'));
+});
+
+test('gitlab: create reads the new issue from a work item address too, as gitlab.com now prints it', () => {
+  const r = tracker('glab', ['create', '--subject', 'x', '--description', 'body'], { FAKE_PATH: 'work_items' });
+  assert.equal(r.code, 0, r.err);
+  assert.match(r.out, /^created #34 {2}https:\/\/gitlab\.example\.com\/g\/p\/-\/work_items\/34$/m);
 });
 
 test('gitlab: dry run writes nothing', () => {
