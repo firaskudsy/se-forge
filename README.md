@@ -21,7 +21,7 @@ also work in an existing system of several repositories.
 - **You see where it goes.** Every step is recorded: a local dashboard shows time, waits for you, tokens and cost
   per ticket and per agent, the architecture, the screens, and a forecast of the finish.
 
-Version 0.2.40. Built for Claude Code on Claude subscriptions, on macOS, with GitLab or GitHub.
+Version 0.2.41. Built for Claude Code on Claude subscriptions, on macOS, with GitLab or GitHub.
 New here? Read [GUIDE.md](GUIDE.md): step by step, from zero to a running build.
 
 ## How it works
@@ -185,11 +185,11 @@ detail: [GUIDE.md](GUIDE.md), parts A and B.
 
 **Once per developer:** the `forge` command, the team repository, and where kit versions come from.
 ```bash
-npm install -g git+ssh://git@gitlab.example.com/<group>/se-forge.git#v0.2.40
+npm install -g git+ssh://git@gitlab.example.com/<group>/se-forge.git#v0.2.41
 git clone git@gitlab.example.com:<group>/se-forge-projects.git ~/code/se-forge-projects
 forge setup --team-repo ~/code/se-forge-projects --kit-repo git@gitlab.example.com:<group>/se-forge.git
 ```
-From a local clone instead: `npm install -g git+file://<path to se-forge>#v0.2.40` and
+From a local clone instead: `npm install -g git+file://<path to se-forge>#v0.2.41` and
 `--kit-repo <path to se-forge>`. Each project pins its own kit version (fetched by tag, cached in
 `~/.cache/se-forge/kits/`), so updating the global `forge` changes no project.
 
@@ -303,8 +303,8 @@ engineer spawn on another model than its tier's (decision 94).
 **Prices.** `"prices"` in `project.json` (US dollars per million tokens, per model family, set by a person) turns
 tokens into dollars in `forge timeline` and the dashboard.
 
-**Upgrading.** At a stop (`/pause`): install the same version of `forge` (`npm install -g …#v0.2.40`), then
-`forge upgrade --to 0.2.40` and `forge save`, and start a fresh session; `/resume` has the lead read what changed
+**Upgrading.** At a stop (`/pause`): install the same version of `forge` (`npm install -g …#v0.2.41`), then
+`forge upgrade --to 0.2.41` and `forge save`, and start a fresh session; `/resume` has the lead read what changed
 and follow the new skills over its old handover. Teammates install the same `forge` and run `forge sync`; until
 they do, their agents may only read. Each project moves on its own schedule. The first time Claude Code opens a
 project, accept the "trust this folder" dialog.
@@ -340,7 +340,7 @@ tests/                unit and integration tests; tests/stacks, tests/ci and tes
 
 ## Status
 
-Version 0.2.40 ([CHANGELOG.md](CHANGELOG.md)). Built and tested: the safety layer, the full-stack roles and stack
+Version 0.2.41 ([CHANGELOG.md](CHANGELOG.md)). Built and tested: the safety layer, the full-stack roles and stack
 guides, discovery-first bootstrap with the requirements panel, the pipeline with tickets that close on merge and
 follow-ups by priority, mobile apps in Flutter, local containers and CI, architecture records and load tests, the
 starter, the dashboard, per-ticket limits, and the first phase of system mode. Every choice is a numbered decision
