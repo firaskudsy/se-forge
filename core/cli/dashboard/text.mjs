@@ -6,6 +6,7 @@ import { SILENT_MS, WAIT_KINDS, agentCount } from './measures.mjs';
 import { day, when } from './format.mjs';
 import { countsText } from './issues.mjs';
 import { stepsText } from './steps.mjs';
+import { finishText } from './finish.mjs';
 import { duration } from '../timeline.mjs';
 import { fmt } from '../metrics.mjs';
 
@@ -82,6 +83,8 @@ export function renderText(m, { project }) {
   out.push(fc
     ? `Forecast: ${fc.remaining} tickets left. At the pace of the ${fc.basis} merged so far, one after the other: done around ${day(fc.doneMid)} (from ${day(fc.doneLo)} to ${day(fc.doneHi)}), about ${fmt(fc.tokensMid)} tokens${money ? ` and ${dollars(fc.costMid)} (${dollars(fc.costLo)}–${dollars(fc.costHi)})` : ''}.`
     : `Forecast: too early, it needs at least 3 merged tickets with a timeline (${timed.filter((t) => t.mergedAt).length} so far).`);
+  // When every step could be done, the release too (decision 145): the page's Finish card.
+  if (finishText(m.finish, m.now)) out.push(`Finish: ${finishText(m.finish, m.now).line}.`);
   if (m.data.catalogue.length) {
     const added = m.every.filter((t) => !t.t);
     out.push(`Scope: ${m.data.catalogue.length} tickets from the bootstrap${added.length ? `; ${added.length} added since (${added.map((t) => t.id).join(' ')})` : ''}.`);

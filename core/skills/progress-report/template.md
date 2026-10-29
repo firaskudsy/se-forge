@@ -38,6 +38,7 @@ The owner-assistant answered these from your earlier answers (decision 138). Tic
 
 ## Forecast
 <the forecast line as printed>; <the scope line when there is one>
+Finish: <the Finish line as printed>
 
 ## Numbers
 | Merged | Stories | Working | Waiting for you | Tokens | API cost | Opus share | Agents |

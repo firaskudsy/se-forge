@@ -12,6 +12,7 @@ import { git } from '../../policy/lib/context.mjs';
 import { renderArchitecture } from './architecture-view.mjs';
 import { projectSteps } from './steps.mjs';
 import { renderSteps } from './steps-view.mjs';
+import { finish, finishText } from './finish.mjs';
 import { ticketUsage, ticketLimits, reached, teamPaths } from '../../policy/lib/limits.mjs';
 import { day, weekday, clock, when } from './format.mjs';
 import { duration } from '../timeline.mjs';
@@ -86,7 +87,10 @@ export function dashboardModel({ main, folder, teamRoot, base, stateDir, prices 
   const skills = agentsAndSkills(lines, { ...readAgentFiles(main), otherGuides: ALL_GUIDES.filter((g) => !mine.has(g)) });
   const prog = progress(data, all, now);
   const steps = projectSteps({ folder, main, base, promote, data, lines: everyLine, board: issues?.readAt ? [...board.entries()].map(([num, i]) => ({ num, closed: fromBoard(i).closed })) : null, all, progress: prog });
-  return { data, all, tickets: picked, every, table, only, kit, issues: tracked, app, architecture, watch, link, repoLinks: repoLinks({ main, folder, repos, origin }), lines, money, prices, now, since, shots, progress: prog, steps, roles: roles(lines, prices), friction: friction(lines), timeline: projectTimeline(lines, { merges, shots: marks }), skills };
+  const timeline = projectTimeline(lines, { merges, shots: marks });
+  // When the app could be done (decision 145), at the pace of the whole project, whatever --days or --ticket say.
+  const end = finish({ steps, all, drafts: data.drafts, catalogue: data.catalogue, forecast: prog.forecast, timeline: days || only ? projectTimeline(everyLine) : timeline, now });
+  return { data, all, tickets: picked, every, table, only, kit, issues: tracked, app, architecture, watch, link, repoLinks: repoLinks({ main, folder, repos, origin }), lines, money, prices, now, since, shots, progress: prog, steps, finish: end, roles: roles(lines, prices), friction: friction(lines), timeline, skills };
 }
 
 // The project's repositories on their host, for the links beside the page's title: the client repo (a system's
@@ -182,11 +186,14 @@ export function renderPage(m, { project }) {
   const amount = money ? dollars : fmt;
   const sums = totals(m);
   const costNote = money ? '' : '<p class="hint">Tokens shown: add prices to project.json to see dollars (the guide, part E).</p>';
+  const end = finishText(m.finish, m.now);
+  // [label, value, small line, hint]
   const kpis = [
     ['Tickets merged', `${p.ticketsDone.length} of ${p.totalTickets}`],
     ['Stories done', p.totalStories ? `${p.storiesDone.length} of ${p.totalStories}` : 'no story list'],
-    ['Tokens', fmt(sums.tokens), splitText(sums)],
-    ['API cost', money ? dollars(sums.cost) : 'no prices set', money ? splitText(sums, 'cost') : ''],
+    ...(end ? [['Finish (estimate)', end.value, end.more, `Every step done, the release too: ${end.line}.`]] : []),
+    ['Tokens', fmt(sums.tokens), splitText(sums), SPLIT_HINT],
+    ['API cost', money ? dollars(sums.cost) : 'no prices set', money ? splitText(sums, 'cost') : '', SPLIT_HINT],
     ['Working time', duration(sums.working)],
     ['Waiting for you', duration(sums.waiting)],
     [money ? 'Opus share of cost' : 'Opus share of tokens', pct(sums.opusShare)],
@@ -296,7 +303,7 @@ export function renderPage(m, { project }) {
     series: [{ label: 'Tickets', cls: 'l-tickets', total: p.totalTickets, times: p.ticketsDone, forecast: true }, ...(p.totalStories ? [{ label: 'Stories', cls: 'l-stories', total: p.totalStories, times: p.storiesDone }] : [])],
     from, to: m.now, forecast: fc ? { lo: fc.doneLo, mid: fc.doneMid, hi: fc.doneHi, title: `forecast ${day(fc.doneLo)} – ${day(fc.doneHi)}` } : null,
   });
-  const fcText = fc ? `<p class="fc">${fc.remaining} tickets left. At the pace of the ${fc.basis} merged so far, one after the other: done around <b>${day(fc.doneMid)}</b> (from ${day(fc.doneLo)} to ${day(fc.doneHi)}), about <b>${fmt(fc.tokensMid)} tokens</b>${money ? ` and <b>${dollars(fc.costMid)}</b> (${dollars(fc.costLo)}–${dollars(fc.costHi)})` : ''}.</p>` : `<p class="fc">Too early for a forecast: it needs at least 3 merged tickets with a timeline (${timed.filter((t) => t.mergedAt).length} so far).</p>`;
+  const fcText = fc ? `<p class="fc">${fc.remaining} tickets left. At the pace of the ${fc.basis} merged so far, one after the other: done around <b>${day(fc.doneMid)}</b> (from ${day(fc.doneLo)} to ${day(fc.doneHi)}), about <b>${fmt(fc.tokensMid)} tokens</b>${money ? ` and <b>${dollars(fc.costMid)}</b> (${dollars(fc.costLo)}–${dollars(fc.costHi)})` : ''}.</p>` : `<p class="fc">Too early for a forecast from merged tickets: it needs at least 3 with a timeline (${timed.filter((t) => t.mergedAt).length} so far). Until then the Finish card estimates from the tickets' estimates.</p>`;
   const c6b = timed.length ? gantt({ rows: timed.map((t) => ({ label: label(t), from: t.from, to: t.to, open: t.open, title: `${t.id} ${t.title}: ${when(t.from)} → ${t.open ? 'open' : when(t.to)}`, bars: t.agents.map((a) => [Math.max(a.from, t.from), Math.min(a.to, t.to)]) })), from, to: m.now }) : '';
 
   // Chart 3: the tracker's issues by status over time (decision 122).
@@ -409,7 +416,7 @@ footer{color:var(--dim);font-size:12px}footer p{margin:4px 0}
 .status{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:999px;padding:4px 12px;margin:0 0 10px;font-weight:600}.status i{width:9px;height:9px;border-radius:50%;background:var(--idle)}.status.up i{background:var(--i-closed)}.status.down i{background:var(--dim)}
 </style></head><body><main>
 <header class="top"><div><h1>${esc(project)}</h1><p class="sub">${m.since > 0 ? `Last ${Math.round((m.now - m.since) / (24 * H))} days` : 'Whole project'} · built ${esc(when(m.now))} · ${m.table.length} tickets${kitText(m.kit) ? ` · ${esc(kitText(m.kit))}` : ''}${m.watch ? ` · <span id="watch">watching: a new page every ${m.watch.every} min, and this one reloads itself</span>` : ''}</p></div>${repoNav(m.repoLinks)}</header>
-<div class="kpis">${kpis.map(([k, v, more]) => `<div class="kpi"${more ? ` title="${esc(SPLIT_HINT)}"` : ''}><span>${esc(k)}</span><b>${esc(v)}</b>${more ? `<small>${esc(more)}</small>` : ''}</div>`).join('')}</div>
+<div class="kpis">${kpis.map(([k, v, more, hint]) => `<div class="kpi"${hint && more ? ` title="${esc(hint)}"` : ''}><span>${esc(k)}</span><b>${esc(v)}</b>${more ? `<small>${esc(more)}</small>` : ''}</div>`).join('')}</div>
 ${renderSteps(m.steps)}
 <nav class="tabs" role="tablist" aria-label="Dashboard sections">${TABS.map(([id, l], i) => `<button type="button" role="tab" id="tab-btn-${id}" aria-controls="tab-${id}" aria-selected="${i === 0}" data-tab="${id}">${esc(l)}${id === 'screens' && m.shots.length ? `<span class="count">${m.shots.length}</span>` : ''}</button>`).join('')}</nav>
 ${panel('overview', `${card(1, 'The project over time', 'Where did the work wait for you? Each day across, in the hours anything happened: the top lane is the AI at work, the bottom lane each wait for you, by kind. Blank in both is nobody working; a triangle is a merge, a camera a screenshot (click it to see it).', legend([...AI, ...kinds, MARK, ...SHOT]) + cDays + kindsText)}

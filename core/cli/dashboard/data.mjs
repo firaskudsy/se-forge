@@ -80,7 +80,7 @@ export function readCatalogue(folder) {
     const epic = cells[n + 1] && !/^[—–-]$/.test(cells[n + 1]) ? cells[n + 1] : null;
     tickets.push({ num, t, title: ((n > i + 1 ? cells[i + 1] : '') || c.title || '').replace(/^(?:E\d+-)?T-?\d+[a-z]?\b[\s:.—–-]*/, ''), epic, stories: c.stories, areas: c.areas.length ? c.areas : AREAS(cells[n + 2]), estimate: c.estimate ?? null });
   }
-  return { tickets, epics, planned: byT.size, estimated: [...byT.values()].filter((c) => c.estimate).length };
+  return { tickets, epics, drafts: [...byT.values()].map((c) => ({ t: c.t, estimate: c.estimate })), planned: byT.size, estimated: [...byT.values()].filter((c) => c.estimate).length };
 }
 
 export function readPlans(folder) {
@@ -216,5 +216,5 @@ export function projectData({ main, folder, teamRoot, base, stateDir, repos = nu
       rounds: fs.existsSync(path.join(reviewsDir, String(num))) ? reviewRounds(teamRoot, `${rel}/reviews/${num}`) : [],
     };
   });
-  return { epics, stories, catalogue: catalogue.tickets, plannedTickets: catalogue.planned, estimatedTickets: catalogue.estimated, tickets, lines: lines.sort((a, b) => T(a) - T(b)), shots: readShots(folder), gatesFailed: [stateDir, ...(repos ?? []).map((r) => r.stateDir)].flatMap(readGatesFailed), repos: (repos ?? []).map((r) => r.name) };
+  return { epics, stories, catalogue: catalogue.tickets, drafts: catalogue.drafts, plannedTickets: catalogue.planned, estimatedTickets: catalogue.estimated, tickets, lines: lines.sort((a, b) => T(a) - T(b)), shots: readShots(folder), gatesFailed: [stateDir, ...(repos ?? []).map((r) => r.stateDir)].flatMap(readGatesFailed), repos: (repos ?? []).map((r) => r.name) };
 }

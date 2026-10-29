@@ -450,8 +450,9 @@ per ten issues, later ones only fetch what changed). The page itself needs no in
 open the project's repository and its folder in the team repo on GitLab or GitHub (made from their `origin` remotes;
 a remote on this machine gets none). The
 totals stay on top (among them **Working time**: the AI at work, without the waits for you and without the
-stretches when nothing happened, such as a laptop asleep; and **Tokens**, split into re-read from the cache, new and
-output, so a large total is not mistaken for a large bill); under them, **where the project is** (below); and the
+stretches when nothing happened, such as a laptop asleep; **Tokens**, split into re-read from the cache, new and
+output, so a large total is not mistaken for a large bill; and **Finish (estimate)**: when every step could be done, the
+release too, from the work left and the project's own pace, docs/metrics.md); under them, **where the project is** (below); and the
 charts, the app's screenshots and the tickets are in nine tabs:
 
 | Tab | Chart | Look for |

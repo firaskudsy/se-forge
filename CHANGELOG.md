@@ -8,6 +8,14 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ## [Unreleased]
 
+### Added
+- **Finish (estimate)** on the dashboard (decision 145): a card after the tickets and stories with when every step
+  could be done, the release too, the days left on average (`about 70 days left (52–89)`) and the pace. The work left (the bootstrap's steps still to do, the
+  tickets not merged, the release as one more ticket) over the AI's working time a day in the last 14 days. Before
+  three tickets merge, the tickets count at the drafts' estimates, corrected by how long the first merged ones took
+  against theirs; from three on, at chart 2's pace. `forge dashboard --text` prints it as its `Finish:` line, and the
+  progress report quotes it.
+
 ## [0.2.43] - 2026-10-29
 
 ### Added

@@ -251,7 +251,8 @@ In a terminal (`forge help` for every option; one page for the team: [docs/cheat
 
 The hooks record every step of every session in `.forge/state/` (never your messages, file contents or command
 output; secrets masked), at no token cost. `forge dashboard` turns it into one local page: links to the project's repository and its folder in the team repo,
-where the project is, step by step from discovery to the release, with what waits for you, then nine tabs:
+when it could be done, where the project is, step by step from discovery to the release, with what waits for you,
+then nine tabs:
 
 | Tab | Shows |
 |---|---|
