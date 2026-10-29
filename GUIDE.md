@@ -478,7 +478,7 @@ Hover any bar or segment for its numbers.
 
 **Where the project is.** Between the totals and the tabs, a row of steps: the bootstrap's nine (Discovery, Stories,
 Architecture, Screens, Contract, Tickets, Panel, Your review, Setup), then Build and Release. Green with a tick is done,
-the blue ring is where the project is now, amber with `!` waits for you, a dashed ring was skipped (no contract, for
+the pulsing ring is where the project is now, amber with `!` waits for you, a dashed ring was skipped (no contract, for
 example). Under the row, the current step's two to four sub-steps, such as `Seats 9 · Summary · Reruns 42 of 60` for
 the panel; in the build, one row per ticket in flight with where it is: Plan, Build, Review, Merge. The steps come from
 the project's files and the repository's git (the merge requests merged, the tags pushed), not from what the lead wrote

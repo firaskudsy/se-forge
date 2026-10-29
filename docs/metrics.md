@@ -201,7 +201,9 @@ engineer, a reviewer or QA worked on it (by the role its spawn named, as `db-rev
 name its agents freely), it is on the board, and it is neither merged nor closed; the bootstrap's own agents count for
 no ticket, even when the timeline guessed one from their spawn's words. It waits for you when its plan says `waiting
 for the owner` or `blocked`, or it is at its limit (decision 127). `forge dashboard --text` prints the same as its
-`Step:` and `Waiting for you:` lines. On a page narrower than 720 px only the current step keeps its name.
+`Step:` and `Waiting for you:` lines. On a page narrower than 720 px only the current step keeps its name. The current
+step's dot pulses, and the line into it fades from green to its colour; with the system set to reduce motion it does
+not pulse.
 
 
 **Overview**

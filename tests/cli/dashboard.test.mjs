@@ -371,6 +371,11 @@ test('forge dashboard: one page with fifteen charts, the architecture, the scree
   assert.equal((html.match(/<span class="num">/g) || []).length, 15);
   assert.deepEqual([...html.matchAll(/<button type="button" role="tab" [^>]*aria-selected="(\w+)" data-tab="(\w+)">/g)].map((x) => `${x[2]}:${x[1]}`), ['overview:true', 'architecture:false', 'time:false', 'cost:false', 'quality:false', 'skills:false', 'screens:false', 'app:false', 'tickets:false']);
   assert.deepEqual([...html.matchAll(/<section class="panel" id="tab-(\w+)"/g)].map((x) => x[1]), ['overview', 'architecture', 'time', 'cost', 'quality', 'skills', 'screens', 'app', 'tickets']);
+  // The stepper between the totals and the tabs (decision 143); its current step pulses, unless the viewer asks for less motion.
+  assert.ok(html.indexOf('<section class="stepper"') > html.indexOf('<div class="kpis">') && html.indexOf('<section class="stepper"') < html.indexOf('<nav class="tabs"'));
+  assert.match(html, /<li class="st-now" aria-current="step" title="10\. Build: now · 2 of 3 merged"><i>10<\/i><span>Build<\/span><\/li>/);
+  assert.match(html, /\.stp li\[aria-current\]>i::after\{[^}]*animation:st-pulse 1\.8s ease-out infinite\}/);
+  assert.match(html, /@media \(prefers-reduced-motion:reduce\)\{\.stp li\[aria-current\]>i::after\{animation:none;display:none\}\}/);
   assert.match(html, /data-tab="screens">Screens<span class="count">2<\/span>/, 'a record pointing outside shots/ is skipped');
   assert.match(html, /alt="edited by hand" width="" height="5"/, 'what a record says is never markup');
   assert.doesNotMatch(html, /<script>x\(\)/);

@@ -8,6 +8,10 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ## [Unreleased]
 
+### Changed
+- The dashboard's current step pulses, and the line into it fades from green to the step's colour (blue, or amber
+  when it waits for you). With the system set to reduce motion, it does not pulse.
+
 ## [0.2.40] - 2026-10-28
 
 ### Added
