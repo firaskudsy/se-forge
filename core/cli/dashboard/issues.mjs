@@ -235,13 +235,29 @@ export function issueFlow(issues) {
   return { points, now: { ...n }, total: counted.length, epics: issues.length - counted.length };
 }
 
+// A repository's page from its remote: git@host:group/app.git, ssh://git@host:2222/group/app.git or
+// https://user:token@host/group/app.git → https://host/group/app (an http(s) remote keeps its port, never the
+// user or token). null for a remote on this machine (a path) or none.
+export function webUrl(remote) {
+  const m = /^(?:(\w+):\/\/)?(?:[^@/]+@)?([^/:]+)(:\d+)?[:/](.+?)(?:\.git)?\/?$/.exec(String(remote ?? '').trim());
+  // A Windows path (C:/repos/app.git) is on this machine too.
+  if (!m || m[1] === 'file' || /^\//.test(m[4]) || /^[a-z]$/i.test(m[2])) return null;
+  return /^https?$/.test(m[1] ?? '') ? `${m[1]}://${m[2]}${m[3] ?? ''}/${m[4]}` : `https://${m[2]}/${m[4]}`;
+}
+
+// A folder of a repository on its host, on a branch: …/-/tree/main/app on GitLab, …/tree/main/app on GitHub.
+export function treeUrl(base, branch, dir) {
+  if (!base || !dir) return base;
+  const at = `${branch || 'HEAD'}/${dir}`.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+  return `${base}${/^https?:\/\/github\.com\//.test(base) ? '' : '/-'}/tree/${at}`;
+}
+
 // A ticket's page on the tracker: the address the tracker gave for it, else one made from the repository's remote
 // (git@host:group/app.git or https://host/group/app.git → https://host/group/app/-/issues/12 on GitLab,
 // https://host/group/app/issues/12 on GitHub). null when neither is known.
 export function issueLinks({ issues = [], remote = '', tracker = 'gitlab' }) {
   const known = new Map(issues.filter((i) => i.url).map((i) => [Number(i.id), i.url]));
-  const m = /^(?:\w+:\/\/)?(?:[^@/]+@)?([^/:]+)(?::\d+)?[:/](.+?)(?:\.git)?\/?$/.exec(String(remote).trim());
-  const base = m && !/^\//.test(m[2]) ? `https://${m[1]}/${m[2]}` : null;
+  const base = webUrl(remote);
   // OpenProject's work packages are not under the repository's remote: only the address it gave is known.
   return (num) => known.get(Number(num)) ?? (base && tracker !== 'openproject' ? `${base}${tracker === 'github' ? '' : '/-'}/issues/${num}` : null);
 }

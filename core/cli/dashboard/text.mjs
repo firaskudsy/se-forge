@@ -66,6 +66,7 @@ export function renderText(m, { project }) {
   const fc = p.forecast;
   const out = [`${project}: progress on ${when(m.now)}${Number.isFinite(m.since) ? `, from ${when(m.since)}` : ''}${m.only ? `, tickets ${m.only.map((n) => `#${n}`).join(' ')}` : ''}`];
   if (kitText(m.kit)) out.push(`Kit: ${kitText(m.kit)}.`);
+  if (m.repoLinks?.length) out.push(`Repos: ${m.repoLinks.map((l) => `${l.label} ${l.url}`).join(' · ')}`);
   // Where the project is, and what waits for you (decision 143): the stepper above the page's tabs.
   out.push(...stepsText(m.steps));
   out.push('');

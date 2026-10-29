@@ -544,6 +544,33 @@ test('the kit version: what this checkout runs, with the project\'s pin and the 
   assert.ok(fs.readFileSync(path.join(w.state, 'dashboard.html'), 'utf8').includes(` tickets · ${line}</p>`), 'the page names it under the title');
 });
 
+test('the repositories: links by the title to the client repo and the project\'s folder in the team repo, and a Repos line in --text', () => {
+  const w = world();
+  const env = { ...process.env, CLAUDECODE: '' };
+  const page = () => {
+    const r = spawnSync('node', [FORGE, 'dashboard', '--offline', '--no-open'], { cwd: w.client, encoding: 'utf8', env });
+    assert.equal(r.status, 0, r.stderr);
+    return fs.readFileSync(path.join(w.state, 'dashboard.html'), 'utf8');
+  };
+  assert.doesNotMatch(page(), /class="repos"/, 'a remote on this machine and a team repo without one: no links');
+
+  sh(w.client, 'git', 'remote', 'set-url', 'origin', 'git@gitlab.example.com:acme/app.git');
+  sh(w.team, 'git', 'remote', 'add', 'origin', 'https://bot:s3cret@gitlab.example.com/acme/se-forge-projects.git');
+  const html = page();
+  const nav = /<nav class="repos" aria-label="Repositories">(.*?)<\/nav><\/header>/.exec(html)?.[1];
+  assert.ok(nav, 'beside the title, in its header');
+  assert.ok(html.indexOf('<nav class="repos"') < html.indexOf('<div class="kpis">'));
+  assert.deepEqual([...nav.matchAll(/<a href="([^"]+)" target="_blank" rel="noopener"[^>]*><span>([^<]+)<\/span><b>([^<]+)<\/b>/g)].map((x) => x.slice(1)), [
+    ['https://gitlab.example.com/acme/app', 'Project repo', 'acme/app'],
+    ['https://gitlab.example.com/acme/se-forge-projects/-/tree/main/acme', 'Team repo', 'acme/se-forge-projects › acme'],
+  ]);
+  assert.doesNotMatch(html, /s3cret|bot@/, 'never the remote\'s user or token');
+
+  const r = spawnSync('node', [FORGE, 'dashboard', '--offline', '--text'], { cwd: w.client, encoding: 'utf8', env });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /^acme: progress on [^\n]+\nRepos: Project repo https:\/\/gitlab\.example\.com\/acme\/app · Team repo https:\/\/gitlab\.example\.com\/acme\/se-forge-projects\/-\/tree\/main\/acme\nStep: /);
+});
+
 test('forge dashboard: issues over time from the tracker, its line in --text, and the last read when it cannot be reached (decision 122)', () => {
   const w = world();
   const bin = path.join(w.base, 'bin');

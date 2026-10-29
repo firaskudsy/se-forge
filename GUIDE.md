@@ -446,7 +446,9 @@ it makes a new page every 5 minutes (`--every 2` for two) until you press Ctrl+C
 after each, on the same tab and at the same place. It combines the timeline with
 the project's stories, tickets, plans and estimates, review rounds and merges, and reads the issues' history from
 GitLab for chart 3 (`--offline` skips that and uses the last read; the first read of a project takes a few seconds
-per ten issues, later ones only fetch what changed). The page itself needs no internet. The
+per ten issues, later ones only fetch what changed). The page itself needs no internet. Beside the title, two links
+open the project's repository and its folder in the team repo on GitLab or GitHub (made from their `origin` remotes;
+a remote on this machine gets none). The
 totals stay on top (among them **Working time**: the AI at work, without the waits for you and without the
 stretches when nothing happened, such as a laptop asleep; and **Tokens**, split into re-read from the cache, new and
 output, so a large total is not mistaken for a large bill); under them, **where the project is** (below); and the

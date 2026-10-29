@@ -7,7 +7,7 @@ import { projectData, readAgentFiles } from './data.mjs';
 import { ticketSummaries, progress, roles, friction, replies, composition, daily, groupBy, stageOf, projectTimeline, agentRows, agentCount, agentsAndSkills, STAGES, PARTS, WAIT_KINDS } from './measures.mjs';
 import { stackGuides, ALL_GUIDES } from '../../policy/lib/stack.mjs';
 import { stackedBars, columns, gantt, burnup, dayStrips, flow, esc } from './svg.mjs';
-import { BANDS, issueFlow, countsText, issueLinks, isEpic, fromBoard, issueTicket } from './issues.mjs';
+import { BANDS, issueFlow, countsText, issueLinks, isEpic, fromBoard, issueTicket, webUrl, treeUrl } from './issues.mjs';
 import { git } from '../../policy/lib/context.mjs';
 import { renderArchitecture } from './architecture-view.mjs';
 import { projectSteps } from './steps.mjs';
@@ -80,12 +80,28 @@ export function dashboardModel({ main, folder, teamRoot, base, stateDir, prices 
   const shots = data.shots.filter((s) => s.at >= since && (!only || only.includes(s.ticket))).map((s, i) => ({ ...s, n: i + 1 }));
   const marks = shots.map((s) => ({ at: s.at, href: `#shot-${s.n}`, title: `Screenshot ${clock(s.at)}${s.ticket ? ` · #${s.ticket}` : ''} · ${s.what}` }));
   const tracked = issues ? { ...issueFlow(issues.issues), host: issues.host, readAt: issues.readAt, error: issues.error } : null;
-  const link = issueLinks({ issues: issues?.issues ?? [], remote: main ? git(main, ['remote', 'get-url', 'origin']).out : '', tracker });
+  const origin = (dir) => (dir ? git(dir, ['remote', 'get-url', 'origin']).out : '');
+  const link = issueLinks({ issues: issues?.issues ?? [], remote: origin(main), tracker });
   const mine = new Set(Object.values(stackGuides(stack)).flat());
   const skills = agentsAndSkills(lines, { ...readAgentFiles(main), otherGuides: ALL_GUIDES.filter((g) => !mine.has(g)) });
   const prog = progress(data, all, now);
   const steps = projectSteps({ folder, main, base, promote, data, lines: everyLine, board: issues?.readAt ? [...board.entries()].map(([num, i]) => ({ num, closed: fromBoard(i).closed })) : null, all, progress: prog });
-  return { data, all, tickets: picked, every, table, only, kit, issues: tracked, app, architecture, watch, link, lines, money, prices, now, since, shots, progress: prog, steps, roles: roles(lines, prices), friction: friction(lines), timeline: projectTimeline(lines, { merges, shots: marks }), skills };
+  return { data, all, tickets: picked, every, table, only, kit, issues: tracked, app, architecture, watch, link, repoLinks: repoLinks({ main, folder, repos, origin }), lines, money, prices, now, since, shots, progress: prog, steps, roles: roles(lines, prices), friction: friction(lines), timeline: projectTimeline(lines, { merges, shots: marks }), skills };
+}
+
+// The project's repositories on their host, for the links beside the page's title: the client repo (a system's
+// member repositories, each by its name), then the project's folder in the team repo, on the branch checked out.
+// A repository whose remote is on this machine, or has none, gets no link.
+export function repoLinks({ main, folder, repos = null, origin }) {
+  const name = (url) => url.replace(/^\w+:\/\/[^/]+\//, '');
+  const out = [];
+  const add = (label, url, shown = url && name(url)) => { if (url) out.push({ label, url, name: shown }); };
+  add('Project repo', webUrl(origin(main)));
+  for (const r of repos ?? []) add(r.name, webUrl(origin(r.dir)));
+  const team = folder ? webUrl(origin(folder)) : null;
+  const dir = team ? git(folder, ['rev-parse', '--show-prefix']).out.replace(/\/$/, '') : '';
+  add('Team repo', team && treeUrl(team, dir && git(folder, ['rev-parse', '--abbrev-ref', 'HEAD']).out, dir), team && `${name(team)}${dir ? ` › ${dir}` : ''}`);
+  return out;
 }
 
 // A ticket's status: its board's (decision 135), else what the records tell.
@@ -106,6 +122,9 @@ function rowOf(t) {
 }
 // A system's table names each ticket's repository last (decision 131).
 export const csv = (m) => { const cols = m.data.repos?.length ? [...CSV, 'repo'] : CSV; return [cols.join(','), ...m.table.map((t) => { const r = rowOf(t); return cols.map((c) => cell(r[c])).join(','); })].join('\n'); };
+
+// The links beside the title to the repositories (repoLinks), each opening in a new tab.
+const repoNav = (links) => (links?.length ? `<nav class="repos" aria-label="Repositories">${links.map((l) => `<a href="${esc(l.url)}" target="_blank" rel="noopener" title="${esc(l.url)}"><span>${esc(l.label)}</span><b>${esc(l.name)}</b><i aria-hidden="true">↗</i></a>`).join('')}</nav>` : '');
 
 function legend(keys) {
   return `<div class="legend">${keys.map((k) => `<span><i class="${k.cls}"></i>${esc(k.label)}</span>`).join('')}</div>`;
@@ -356,7 +375,8 @@ export function renderPage(m, { project }) {
 :root{--bg:#f7f7f5;--card:#fff;--fg:#1d1d1b;--dim:#6b6b66;--line:#e3e3df;--agents:#2f6fde;--gates:#8a5cf6;--waiting:#e8590c;--lead:#12a594;--idle:#d6d6d0;--opus:#7c3aed;--sonnet:#2f6fde;--haiku:#12a594;--fable:#d97706;--other:#9a9a94;--first:#2f6fde;--rework:#e03131;--role:#2f6fde;--tickets:#2f6fde;--stories:#12a594;--heat:224,49,49;--s-plan:#7c3aed;--s-build:#2f6fde;--s-review:#d97706;--s-qa:#12a594;--s-lead:#e8590c;--k-input:#2f6fde;--k-cw5:#d97706;--k-cw1:#e8590c;--k-cr:#9a9a94;--k-output:#7c3aed;--w-reply:#e8590c;--w-question:#f59f00;--w-approval:#c92a2a;--w-permission:#e64980;--shot:#0b7285;--i-open:#2f6fde;--i-progress:#d97706;--i-testing:#8a5cf6;--i-closed:#12a594}
 @media (prefers-color-scheme: dark){:root{--bg:#141413;--card:#1e1e1c;--fg:#ececea;--dim:#9a9a94;--line:#33332f;--idle:#45453f;--shot:#3bc9db}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
-main{max-width:1100px;margin:0 auto;padding:24px 16px 48px}h1{font-size:22px;margin:0 0 2px}.sub{color:var(--dim);margin:0 0 18px}
+main{max-width:1100px;margin:0 auto;padding:24px 16px 48px}h1{font-size:22px;margin:0 0 2px}.sub{color:var(--dim);margin:0}
+.top{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:10px 16px;margin:0 0 18px}.top>div{flex:1 1 320px;min-width:0}.repos{display:flex;flex-wrap:wrap;gap:6px;max-width:100%}.repos a{display:inline-flex;align-items:baseline;gap:6px;max-width:100%;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--fg);padding:4px 11px;font-size:12px;text-decoration:none}.repos a:hover{border-color:var(--agents)}.repos a:focus-visible{outline:2px solid var(--agents);outline-offset:2px}.repos span{color:var(--dim);white-space:nowrap}.repos b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.repos i{font-style:normal;color:var(--agents)}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:18px}.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px}.kpi b{display:block;font-size:20px}.kpi span{color:var(--dim);font-size:12px}.kpi small{display:block;color:var(--dim);font-size:11px;margin-top:2px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:16px}h2{font-size:16px;margin:0}.num{display:inline-block;width:22px;height:22px;border-radius:11px;background:var(--fg);color:var(--card);text-align:center;font-size:12px;line-height:22px;margin-right:8px}
 .q{color:var(--dim);margin:4px 0 10px}h3{font-size:13px;margin:14px 0 4px}.list{margin:0;padding-left:20px}.dim{color:var(--dim)}.empty{color:var(--dim);font-style:italic}.fc{margin:6px 0 10px}.hint{color:var(--waiting);font-size:12px;margin:0 0 6px}
@@ -388,7 +408,7 @@ footer{color:var(--dim);font-size:12px}footer p{margin:4px 0}
 .verb{display:inline-block;min-width:52px;text-align:center;border-radius:4px;padding:1px 6px;font:600 11px ui-monospace,Menlo,monospace;color:#fff;background:var(--dim)}.v-get{background:var(--i-open)}.v-post{background:var(--i-closed)}.v-put,.v-patch{background:var(--i-progress)}.v-delete{background:var(--rework)}
 .status{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:999px;padding:4px 12px;margin:0 0 10px;font-weight:600}.status i{width:9px;height:9px;border-radius:50%;background:var(--idle)}.status.up i{background:var(--i-closed)}.status.down i{background:var(--dim)}
 </style></head><body><main>
-<h1>${esc(project)}</h1><p class="sub">${m.since > 0 ? `Last ${Math.round((m.now - m.since) / (24 * H))} days` : 'Whole project'} · built ${esc(when(m.now))} · ${m.table.length} tickets${kitText(m.kit) ? ` · ${esc(kitText(m.kit))}` : ''}${m.watch ? ` · <span id="watch">watching: a new page every ${m.watch.every} min, and this one reloads itself</span>` : ''}</p>
+<header class="top"><div><h1>${esc(project)}</h1><p class="sub">${m.since > 0 ? `Last ${Math.round((m.now - m.since) / (24 * H))} days` : 'Whole project'} · built ${esc(when(m.now))} · ${m.table.length} tickets${kitText(m.kit) ? ` · ${esc(kitText(m.kit))}` : ''}${m.watch ? ` · <span id="watch">watching: a new page every ${m.watch.every} min, and this one reloads itself</span>` : ''}</p></div>${repoNav(m.repoLinks)}</header>
 <div class="kpis">${kpis.map(([k, v, more]) => `<div class="kpi"${more ? ` title="${esc(SPLIT_HINT)}"` : ''}><span>${esc(k)}</span><b>${esc(v)}</b>${more ? `<small>${esc(more)}</small>` : ''}</div>`).join('')}</div>
 ${renderSteps(m.steps)}
 <nav class="tabs" role="tablist" aria-label="Dashboard sections">${TABS.map(([id, l], i) => `<button type="button" role="tab" id="tab-btn-${id}" aria-controls="tab-${id}" aria-selected="${i === 0}" data-tab="${id}">${esc(l)}${id === 'screens' && m.shots.length ? `<span class="count">${m.shots.length}</span>` : ''}</button>`).join('')}</nav>

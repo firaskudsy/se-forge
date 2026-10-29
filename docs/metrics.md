@@ -294,6 +294,7 @@ the model wrote, its thinking included. `forge dashboard --text` prints the same
 `forge dashboard --text` prints the dashboard's numbers instead of drawing the page, and writes no file
 (decision 113). `--days` and `--ticket` work as for the page. In order:
 - **Kit:** the se-forge version this checkout runs (`.forge/kit`, what its hooks, agents and skills use), with the project's pin when it differs (`forge sync` moves the checkout to it) and the `forge` command's own version when it differs; the page shows the same words under its title;
+- **Repos:** the project's repository and its folder in the team repo on their host, from their `origin` remotes (a system's member repositories too; none for a remote on this machine); the page links them beside its title;
 - the KPIs, the forecast, the scope (the bootstrap's tickets and the ones added since, when the bootstrap has a ticket list) and the time of the last line in the timeline;
 - **Issues:** the tracker's issues now by status (open, in progress, In Testing, closed; epics not counted), with when they were read, or the last read and why the tracker could not be read now (chart 3);
 - **Open:** each ticket started and not merged, with its plan's `Status:` line, estimate, time so far split as in chart 4, review rounds, agents and cost;

@@ -7,7 +7,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readIssues, issueFlow, issueBands, countsText, band, issueLinks } from '../../core/cli/dashboard/issues.mjs';
+import { readIssues, issueFlow, issueBands, countsText, band, issueLinks, webUrl, treeUrl } from '../../core/cli/dashboard/issues.mjs';
 import { flow } from '../../core/cli/dashboard/svg.mjs';
 
 const FAKE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures/issues-glab.js');
@@ -138,6 +138,19 @@ test('a ticket\'s link: the address the tracker gave, else one made from the rem
   assert.equal(issueLinks({ issues: [{ id: 12, url: 'https://gitlab.example.com/ai/lunch-pool/-/issues/12#moved' }], remote: 'git@h:g/a.git' })(12), 'https://gitlab.example.com/ai/lunch-pool/-/issues/12#moved');
   assert.equal(issueLinks({ remote: '/tmp/client.git' })(1), null, 'a local remote: no link');
   assert.equal(issueLinks({})(1), null);
+});
+
+test('a repository\'s page from its remote, and a folder in it on a branch', () => {
+  assert.equal(webUrl('git@gitlab.example.com:ai/app.git'), 'https://gitlab.example.com/ai/app');
+  assert.equal(webUrl('ssh://git@git.example.com:2222/g/sub/app.git'), 'https://git.example.com/g/sub/app', 'an ssh port is not the web\'s');
+  assert.equal(webUrl('https://oauth2:tok@git.example.com:8443/g/app.git/'), 'https://git.example.com:8443/g/app', 'no user or token; an https port kept');
+  assert.equal(webUrl('http://git.local/g/app'), 'http://git.local/g/app');
+  for (const local of ['/tmp/client.git', 'file:///tmp/client.git', 'C:/repos/app.git', '', null]) assert.equal(webUrl(local), null, String(local));
+  assert.equal(treeUrl('https://gitlab.example.com/ai/projects', 'main', 'acme'), 'https://gitlab.example.com/ai/projects/-/tree/main/acme');
+  assert.equal(treeUrl('https://github.com/o/projects', 'release/1', 'my app'), 'https://github.com/o/projects/tree/release/1/my%20app');
+  assert.equal(treeUrl('https://gitlab.example.com/ai/projects', '', 'acme'), 'https://gitlab.example.com/ai/projects/-/tree/HEAD/acme', 'no branch: the default one');
+  assert.equal(treeUrl('https://gitlab.example.com/ai/projects', 'main', ''), 'https://gitlab.example.com/ai/projects', 'the repository itself');
+  assert.equal(treeUrl(null, 'main', 'acme'), null);
 });
 
 // A fake OpenProject: statuses, one board whose column query holds #10 and #11, their activities; the key checked.
