@@ -8,6 +8,8 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ## [Unreleased]
 
+## [0.2.43] - 2026-10-29
+
 ### Added
 - **Your turn** (decision 144): everything only the owner can do comes last in the lead's message, the same every
   time: "Your turn (N steps, in this order)", then numbered steps, one action each, each saying where (in the session
