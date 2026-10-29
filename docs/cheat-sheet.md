@@ -32,9 +32,9 @@ glab config set -g host git.lightring.dev
 ```
 mkdir -p ~/code && cd ~/code
 git clone git@git.lightring.dev:ai/se-forge-projects.git
-npm install -g git+https://github.com/firaskudsy/se-forge.git#v0.2.44
+npm install -g git+https://github.com/firaskudsy/se-forge.git#v0.2.45
 forge setup --team-repo ~/code/se-forge-projects --kit-repo https://github.com/firaskudsy/se-forge.git
-forge version                                    # 0.2.44
+forge version                                    # 0.2.45
 ```
 Figma projects: `claude plugin install figma`, then log in through `/plugin` (GUIDE.md, B8).
 

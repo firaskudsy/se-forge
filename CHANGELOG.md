@@ -8,6 +8,8 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ## [Unreleased]
 
+## [0.2.45] - 2026-10-29
+
 ### Changed
 - **The finish card leads with the AI's own time** (decision 145, revised): it is now **Finish (AI time)**, and its
   number is the AI work left in days around the clock (`about 27 days`, `21–33 days nonstop`); when that lands on the
