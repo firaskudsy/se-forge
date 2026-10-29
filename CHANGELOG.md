@@ -8,6 +8,8 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ## [Unreleased]
 
+## [0.2.44] - 2026-10-29
+
 ### Added
 - **Finish (estimate)** on the dashboard (decision 145): a card after the tickets and stories with when every step
   could be done, the release too, the days left on average (`about 70 days left (52–89)`) and the pace. The work left (the bootstrap's steps still to do, the
