@@ -49,11 +49,14 @@ export function readStories(folder) {
 }
 
 // The bootstrap's tickets: T-id → stories and areas (tickets.md), and → issue number and epic (tickets-created.md).
+// A draft's heading as the planners write it: "### T-01 Data model", "### T1 — Sign up", "### E1-T1 chore(infra): …",
+// "### E2-T3b perf(agent): …" (a ticket the panel split off).
+const DRAFT = /^###\s+((?:E\d+-)?T-?\d+[a-z]?)\b[\s:.—–-]*(.*)$/;
 export function readCatalogue(folder) {
   const byT = new Map();
   let current = null;
   for (const line of read(path.join(folder, 'bootstrap', 'tickets.md')).split('\n')) {
-    const h = /^###\s+(T-\d+)\s+(.+)$/.exec(line);
+    const h = DRAFT.exec(line);
     if (h) { current = { t: h[1], title: h[2].trim(), stories: [], areas: [], estimate: null }; byT.set(h[1], current); continue; }
     if (!current) continue;
     if (/^\s*-\s*\*\*Estimate:\*\*/.test(line)) current.estimate = hours(line);
@@ -63,13 +66,13 @@ export function readCatalogue(folder) {
   const tickets = [];
   for (const line of read(path.join(folder, 'bootstrap', 'tickets-created.md')).split('\n')) {
     const cells = line.split('|').map((c) => c.trim());
-    const t = /^T-\d+$/.test(cells[1] || '') ? cells[1] : null;
+    const t = /^(?:E\d+-)?T-?\d+[a-z]?$/.test(cells[1] || '') ? cells[1] : null;
     const num = /^#(\d+)$/.exec(cells[3] || '')?.[1];
     if (!t || !num) continue;
     const c = byT.get(t) ?? { stories: [], areas: [] };
-    tickets.push({ num: Number(num), t, title: (cells[2] || c.title || '').replace(/^T-\d+\s+/, ''), epic: cells[4] || null, stories: c.stories, areas: c.areas.length ? c.areas : AREAS(cells[5]), estimate: c.estimate ?? null });
+    tickets.push({ num: Number(num), t, title: (cells[2] || c.title || '').replace(/^(?:E\d+-)?T-?\d+[a-z]?\b[\s:.—–-]*/, ''), epic: cells[4] || null, stories: c.stories, areas: c.areas.length ? c.areas : AREAS(cells[5]), estimate: c.estimate ?? null });
   }
-  return { tickets, planned: byT.size };
+  return { tickets, planned: byT.size, estimated: [...byT.values()].filter((c) => c.estimate).length };
 }
 
 export function readPlans(folder) {
@@ -197,5 +200,5 @@ export function projectData({ main, folder, teamRoot, base, stateDir, repos = nu
       rounds: fs.existsSync(path.join(reviewsDir, String(num))) ? reviewRounds(teamRoot, `${rel}/reviews/${num}`) : [],
     };
   });
-  return { epics, stories, catalogue: catalogue.tickets, plannedTickets: catalogue.planned, tickets, lines: lines.sort((a, b) => T(a) - T(b)), shots: readShots(folder), gatesFailed: [stateDir, ...(repos ?? []).map((r) => r.stateDir)].flatMap(readGatesFailed), repos: (repos ?? []).map((r) => r.name) };
+  return { epics, stories, catalogue: catalogue.tickets, plannedTickets: catalogue.planned, estimatedTickets: catalogue.estimated, tickets, lines: lines.sort((a, b) => T(a) - T(b)), shots: readShots(folder), gatesFailed: [stateDir, ...(repos ?? []).map((r) => r.stateDir)].flatMap(readGatesFailed), repos: (repos ?? []).map((r) => r.name) };
 }

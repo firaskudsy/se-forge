@@ -8,6 +8,23 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ## [Unreleased]
 
+### Added
+- **Where the project is, on the dashboard** (decision 143). Between the totals and the tabs, a row of eleven
+  steps: the bootstrap's nine stages (Discovery, Stories, Architecture, Screens, Contract, Tickets, Panel, Your
+  review, Setup), then Build and Release. Done steps are green, the current one a blue ring, and the ones waiting for
+  you amber. Under the row, the current step's two to four sub-steps (`Seats 9 · Summary · Reruns 42 of 60`), or in
+  the build one row per ticket in flight: Plan, Build, Review, Merge. The steps come from the team repo's files and
+  the client repo's git (merge commits, tags), not from the bootstrap's README, which can lag. The owner's own
+  sub-steps (settings to apply, the review, the merge requests to merge, the contract and release tags, a ticket
+  waiting for an answer or at its limit) make their step amber wherever it is, with what to do on the line under it.
+  `forge dashboard --text` prints the same as its `Step:` and `Waiting for you:` lines, and the progress report reads
+  them first for what waits for the owner.
+
+### Fixed
+- The dashboard reads ticket drafts whatever their heading (`### T1 — …`, `### E1-T1 …`, `### E2-T3b …`, as well as
+  `### T-01 …`), so **Tickets merged** counts every draft: a project with 59 drafts showed 2, the tickets begun.
+- Cost by stage (chart 7) counts agents named `…-review` as reviews, as a lead on a self-hosted model names them.
+
 ## [0.2.39] - 2026-10-26
 
 ### Changed

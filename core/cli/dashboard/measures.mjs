@@ -165,7 +165,7 @@ export function stageOf(who) {
   if (w === 'lead') return 'lead';
   if (w === 'qa-engineer') return 'qa';
   if (/-engineer$/.test(w)) return 'build';
-  if (/reviewer$|^spec-checker$/.test(w)) return 'review';
+  if (/review(er)?$|^spec-checker$/.test(w)) return 'review';
   if (/^(planner|architect|designer|product-analyst|contract-analyst)$/.test(w)) return 'plan';
   return 'other';
 }

@@ -93,7 +93,7 @@ claude
 | A ticket's AI cost | `forge metrics <id> --record` |
 | Where a ticket's time and tokens went | `forge timeline <id>` (`--days 7`, `--csv`, `--json`; cost with `project.prices`) |
 | The project in charts | `forge dashboard` (`--days 14`, `--ticket 11,12`, `--offline`; `--watch` keeps the open page current until Ctrl+C); history first: `forge timeline import` |
-| Where the project stands, as text | `forge dashboard --text`; the lead's report: `/progress-report` (saved in `progress/`) |
+| Where the project stands, as text | `forge dashboard --text` (its `Step:` line: where the project is; `Waiting for you:` what is yours to do); the lead's report: `/progress-report` (saved in `progress/`) |
 | A merged ticket doesn't work | tell the lead; it files a `[Bug]` naming the ticket (merged tickets close by themselves) |
 | Stop for the day, close the laptop, or go offline | `/pause` until it says "Safe to close"; `/resume` in a fresh session later |
 | See what the agents left behind | `forge worktrees` (`--clean` removes the finished ones) |

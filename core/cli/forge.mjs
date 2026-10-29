@@ -820,7 +820,7 @@ async function run(argv, env, cwd, out, failed) {
           const issues = project.tracker ? await readIssues({ main: m, stateDir: path.join(m, '.forge', 'state'), tracker: project.tracker, board: project.board, env, offline: o.offline === true }) : null;
           const model = dashboardModel({ main: m, folder, teamRoot: top.out, base: config.branches.base, stateDir: path.join(m, '.forge', 'state'), prices: project.prices, engineers: config.budget.engineers, days: o.days ? Number(o.days) : null, only, kit: { active: readVersion(path.join(m, '.forge', 'kit')), pinned, cli: kitVersion(), llm: llmLabel(path.join(m, '.forge', 'state'), readJson(userConfigFile(env), {})) }, issues, app: o.text === true ? null : appInfo(m, env),
             architecture: o.text === true ? null : architectureModel({ main: m, folder, base: config.branches.base, project, config, env, stateDir: path.join(m, '.forge', 'state') }), watch: watch ? { every } : null, limits: config.limits, tracker: project.tracker, repos,
-            stack: [...Object.values(project.stack ?? {}), ...(systemOf(m)?.repos ?? []).map((r) => r.stack)].filter((v) => typeof v === 'string') });
+            stack: [...Object.values(project.stack ?? {}), ...(systemOf(m)?.repos ?? []).map((r) => r.stack)].filter((v) => typeof v === 'string'), promote: config.branches.promote });
           if (o.text === true) return { model };
           return { model, ...writeDashboard(model, { project: project.name || path.basename(m), out: file }) };
         };

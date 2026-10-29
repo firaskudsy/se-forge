@@ -449,8 +449,8 @@ GitLab for chart 3 (`--offline` skips that and uses the last read; the first rea
 per ten issues, later ones only fetch what changed). The page itself needs no internet. The
 totals stay on top (among them **Working time**: the AI at work, without the waits for you and without the
 stretches when nothing happened, such as a laptop asleep; and **Tokens**, split into re-read from the cache, new and
-output, so a large total is not mistaken for a large bill), and the charts, the app's screenshots and the tickets are
-in nine tabs:
+output, so a large total is not mistaken for a large bill); under them, **where the project is** (below); and the
+charts, the app's screenshots and the tickets are in nine tabs:
 
 | Tab | Chart | Look for |
 |---|---|---|
@@ -475,6 +475,17 @@ in nine tabs:
 | Tickets | | every ticket, the ones nobody has picked yet too, with its status on the board; sortable by any column, its tokens and cost right after its status; click a ticket's number to open its issue in GitLab, and ▸ to see its agents one by one: the job each was given, its model, its skills, tokens, cost and time, with the lead's own share last. In a system, a Repo column and a filter by repository |
 
 Hover any bar or segment for its numbers.
+
+**Where the project is.** Between the totals and the tabs, a row of steps: the bootstrap's nine (Discovery, Stories,
+Architecture, Screens, Contract, Tickets, Panel, Your review, Setup), then Build and Release. Green with a tick is done,
+the blue ring is where the project is now, amber with `!` waits for you, a dashed ring was skipped (no contract, for
+example). Under the row, the current step's two to four sub-steps, such as `Seats 9 · Summary · Reruns 42 of 60` for
+the panel; in the build, one row per ticket in flight with where it is: Plan, Build, Review, Merge. The steps come from
+the project's files and the repository's git (the merge requests merged, the tags pushed), not from what the lead wrote
+about them, and they ignore `--days`. The amber ones are yours: settings to apply, the review to approve, merge
+requests to merge, the contract or a release to tag, a ticket waiting for your answer or at its limit; the line under
+the steps says what to do. On a phone only the current step keeps its name. `forge dashboard --text` prints the same
+as its `Step:` and `Waiting for you:` lines.
 
 ### The lead's progress report
 After each merge into `dev`, the lead reports where the project stands, and you can ask for a report at any time

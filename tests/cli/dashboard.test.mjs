@@ -468,7 +468,9 @@ test('forge dashboard --text: the page\'s numbers as text, what to look at, and 
   const r = spawnSync('node', [FORGE, 'dashboard', '--offline', '--text'], { cwd: w.client, encoding: 'utf8', env: { ...process.env, CLAUDECODE: '' } });
   assert.equal(r.status, 0, r.stderr);
   const text = r.stdout;
-  assert.match(text, /^acme: progress on \d\d \w{3}, \d+:\d\d [AP]M\n\n/);
+  assert.match(text, /^acme: progress on \d\d \w{3}, \d+:\d\d [AP]M\nStep: /);
+  // Where the project is (decision 143): no bootstrap stage left open, so the build; #12 waits for a person.
+  assert.match(text, /\nStep: 10 of 11, Build \(2 of 3 merged, 1 in flight\); in flight: #12 Build\.\nWaiting for you: Build: #12 is at its limit \(2 review rounds with blockers \(limit 2\)\): forge limits lift 12\.\n\n/);
   assert.match(text, /\nTickets merged: 2 of 3 · stories done: 2 of 3\n/, 'the same totals as the page');
   assert.match(text, /\nWorking time: \d+[hm][^·]* · waiting for you: 28m\n/);
   assert.match(text, /\nTokens: [\d.]+k = [\d.]+[kM]? re-read \(\d+%\) \+ [\d.]+[kM]? new \+ [\d.]+[kM]? output · API cost: no prices set · Opus share of tokens: \d+% · agents: \d+\n/);
@@ -531,7 +533,7 @@ test('the kit version: what this checkout runs, with the project\'s pin and the 
   const r = spawnSync('node', [FORGE, 'dashboard', '--offline', '--text'], { cwd: w.client, encoding: 'utf8', env });
   assert.equal(r.status, 0, r.stderr);
   const line = `se-forge 0.2.10, but the project pins 0.2.11: forge sync${cli === '0.2.10' ? '' : ` (the forge command is ${cli})`}`;
-  assert.match(r.stdout, new RegExp(`^acme: progress on [^\\n]+\\nKit: ${line.replace(/[.()]/g, '\\$&')}\\.\\n\\n`), 'under the header');
+  assert.match(r.stdout, new RegExp(`^acme: progress on [^\\n]+\\nKit: ${line.replace(/[.()]/g, '\\$&')}\\.\\nStep: `), 'under the header');
   const page = spawnSync('node', [FORGE, 'dashboard', '--offline', '--no-open'], { cwd: w.client, encoding: 'utf8', env });
   assert.equal(page.status, 0, page.stderr);
   assert.ok(fs.readFileSync(path.join(w.state, 'dashboard.html'), 'utf8').includes(` tickets · ${line}</p>`), 'the page names it under the title');

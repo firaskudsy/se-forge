@@ -172,6 +172,37 @@ lead's turns, each moment once (chart 1's top lane, added up). It leaves out the
 15 minutes with nothing happening, such as a laptop asleep or a closed session. On clinic-booking: 9 h 18 min of
 work in 38.6 hours from the first line to the last, beside 13 h 07 min waiting for you.
 
+**Where the project is** (decision 143), between the KPIs and the tabs: eleven steps, the bootstrap's nine stages and
+then the build and the release, each with two to four sub-steps, read from the records, never from the bootstrap's
+README (which the lead may not have brought up to date):
+
+| Step | Sub-steps, and where each is read |
+|---|---|
+| Discovery | Questions (`bootstrap/questionnaire.md`) · Register (`decisions.md`, its D-ids counted) · **Your settings**: done once `project.json` names a stack; yours once `project.proposed.json` exists |
+| Stories | Stories (`user-stories.md`) · Authorization matrix |
+| Architecture | NFR · Overview · ADRs (`architecture/nfr.md`, `overview.md`, `adr/*.md`) |
+| Screens | Design system (`design-system.md`, or the design map naming it) · Epics *n* of *m* (the epics of the stories that `design-map.md` names) |
+| Contract | Draft (`contract.yaml`: its operations and version) · API check |
+| Tickets | Drafts (`tickets.md`: `### T-01`, `### T1 —`, `### E1-T1` and `### E2-T3b` headings) · Estimates *n* of *m* |
+| Panel | Seats (`panel/<seat>.md`) · Summary · Reruns *n* of *m* (the Applied table's rows with a Done cell) |
+| Your review | Written (`review.md`) · **Your approval**: done once the work after it began |
+| Setup | **Your merges** (`chore/architecture`, `chore/bootstrap-contract`, `chore/starter` merged) · **Contract tag** (`api-v*`) · Tickets created (`tickets-created.md`, else the board) |
+| Build | one row per ticket in flight: Plan · Build · Review · Merge, by the role of the last agent on it |
+| Release | **Release MR** (the newest `chore/release-vX.Y.Z` merged into `dev`) · **Promotions** (that merge on each `branches.promote` branch) · **Tag** (`vX.Y.Z`) |
+
+A merge is a merge commit as GitLab, GitHub or git word it ("Merge branch 'chore/starter' into 'main'", "Merge pull
+request #3 from acme/chore/starter"); a squash merge leaves none, so it is not seen. The project is at the furthest step
+that has begun, or the next one when that one is complete; the release counts once the build is (every ticket on the
+board closed, or with no board every draft merged). Before the current step, a sub-step with nothing to show counts as
+done, since the work moved on (the contract's API check leaves no record, for one); a step with nothing to show at all
+was skipped. The owner's sub-steps (in bold) are the exception: while there is something to act on (a proposal, a
+branch, a merged contract) and it is not done, the step waits for you, amber. A ticket is in flight when a planner, an
+engineer, a reviewer or QA worked on it (by the role its spawn named, as `db-reviewer: DB review #6`, since a lead may
+name its agents freely), it is on the board, and it is neither merged nor closed; the bootstrap's own agents count for
+no ticket, even when the timeline guessed one from their spawn's words. It waits for you when its plan says `waiting
+for the owner` or `blocked`, or it is at its limit (decision 127). `forge dashboard --text` prints the same as its
+`Step:` and `Waiting for you:` lines. On a page narrower than 720 px only the current step keeps its name.
+
 
 **Overview**
 1. **The project over time:** one row per day, the hours it worked in across, from the bootstrap on. The top lane is the AI at work (agents, gates, the lead alone); the bottom lane is each wait for you, coloured by kind: your reply after the lead stopped, a question, a forge rule's approval, a permission prompt. Both can show at once (an agent works while the lead waits for your answer); blank in both is nobody working; a triangle is a merge, a camera under the lanes a screenshot (`forge shot`; click it to open the picture in the Screens tab). Hover a segment for what and how long.
