@@ -8,6 +8,8 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ## [Unreleased]
 
+## [0.2.42] - 2026-10-29
+
 ### Added
 - Links on the dashboard, beside the title, to the project's repository and to its folder in the team repo, made
   from their `origin` remotes (never their user or token; a remote on this machine gets no link). A system's member
