@@ -10,7 +10,10 @@ import path from 'node:path';
 export const BANDS = [['closed', 'Closed'], ['testing', 'In Testing'], ['progress', 'In progress'], ['open', 'Open']];
 const STATUS = /^status::?(.+)$/i;
 const PER_PAGE = 100;
-const AT_ONCE = 8;
+// gitlab.com's free plan allows 100 calls a minute (HTTP 429 after): a read takes at most HISTORIES issues' histories,
+// two calls each, and leaves the rest to the next read.
+const AT_ONCE = 4;
+const HISTORIES = 40;
 
 function api(cli, endpoint, cwd, env) {
   return new Promise((resolve, reject) => {
@@ -141,14 +144,21 @@ export async function readIssues({ main, stateDir, tracker, board = '', env = pr
   try {
     const before = cache.tracker === tracker ? cache.issues || {} : {};
     const list = await host.list(main, env, board);
+    // The issues themselves are read whole; their histories up to HISTORIES of them, or as far as the tracker lets,
+    // the rest kept as last read and marked to read again, so each read goes on from the last.
+    let stopped = null;
+    let asked = 0;
     const fetched = await each(list, async (i) => {
       const was = before[i.id];
-      return was && was.updated === i.updated ? was.events : (await host.events(i.id, main, env, board)).filter((e) => e.label === undefined || STATUS.test(e.label));
+      if (was && was.updated === i.updated) return was.events;
+      if (stopped || ++asked > HISTORIES) return null;
+      try { return (await host.events(i.id, main, env, board)).filter((e) => e.label === undefined || STATUS.test(e.label)); } catch (e) { stopped ??= e.message; return null; }
     });
-    const issues = Object.fromEntries(list.map((i, k) => [i.id, { ...i, events: fetched[k] }]));
+    const issues = Object.fromEntries(list.map((i, k) => [i.id, fetched[k] ? { ...i, events: fetched[k] } : { ...i, updated: null, events: before[i.id]?.events ?? [] }]));
     fs.mkdirSync(stateDir, { recursive: true });
     fs.writeFileSync(file, JSON.stringify({ tracker, readAt: new Date(now).toISOString(), issues }));
-    return { host: host.name, readAt: now, issues: Object.values(issues), error: null };
+    const behind = fetched.filter((f) => !f).length;
+    return { host: host.name, readAt: now, issues: Object.values(issues), error: null, behind: behind ? `the history of ${behind} of ${list.length} issues is still to read${stopped ? ` (${stopped})` : ''}; the next read goes on` : null };
   } catch (e) {
     return last(e.message);
   }

@@ -91,7 +91,7 @@ export function renderText(m, { project }) {
     const epics = iq.epics ? `; ${iq.epics === 1 ? 'the epic' : `${iq.epics} epics`} not counted` : '';
     out.push(!iq.points.length ? `Issues: no history (${iq.error ? `${iq.host} could not be read: ${iq.error}` : iq.readAt ? 'the tracker has no issues yet' : 'not read yet; run forge dashboard without --offline'}).`
       : iq.error ? `Issues: ${iq.host} could not be read now (${iq.error}); at the last read, ${when(iq.readAt)}: ${countsText(iq.now)}${epics}.`
-        : `Issues: ${countsText(iq.now)} (${iq.host}, read ${when(iq.readAt)}${epics}).`);
+        : `Issues: ${countsText(iq.now)} (${iq.host}, read ${when(iq.readAt)}${epics}${iq.behind ? `; ${iq.behind}` : ''}).`);
   }
   const last = m.lines.at(-1);
   if (last) out.push(`Last activity: ${when(Date.parse(last.at))} (${duration(m.now - Date.parse(last.at))} ago).`);

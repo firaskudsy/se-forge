@@ -43,6 +43,15 @@ const NONE = { totalTickets: 3, ticketsDone: [] };
 const states = (s) => s.steps.map((x) => `${x.label}:${x.state}`).join(' ');
 const subStates = (x) => x.subs.map((y) => `${y.label}:${y.state}`).join(', ');
 
+test('tickets-created.md: each row\'s cells by what they hold, an empty first column too; the epics\' issue numbers apart', () => {
+  const folder = temp('forge-steps-created-');
+  write(path.join(folder, 'bootstrap', 'tickets.md'), '### T1 — Sign up (E1-S1)\n- **Areas:** db, api\n- **Estimate:** 3-5 h\n');
+  write(path.join(folder, 'bootstrap', 'tickets-created.md'), '|  | Ticket | Title | Issue | Epic | Areas |\n| --- | --- | --- | --- | --- | --- |\n|  | E1 | Sign-up | #1 | — | — |\n|  | E2 | Bills | #4 | — | — |\n|  | T1 | Sign up with email (E1-S1) | #15 | E1 | db, api, ui |\n|  | T2 | Add a bill (E2-S1) | #16 | E2 | ui |\n');
+  const c = readCatalogue(folder);
+  assert.deepEqual(c.epics, [1, 4]);
+  assert.deepEqual(c.tickets.map((t) => [t.num, t.t, t.title, t.epic, t.areas.join(','), t.estimate?.low ?? null]), [[15, 'T1', 'Sign up with email (E1-S1)', 'E1', 'db,api', 3], [16, 'T2', 'Add a bill (E2-S1)', 'E2', 'ui', null]]);
+});
+
 test('the drafts are read whatever their heading: T-01, T1 —, E1-T1 and a split-off E2-T1b, with their estimates', () => {
   const folder = bootstrap();
   const c = readCatalogue(folder);
@@ -128,7 +137,7 @@ test('after approval: the owner\'s merges and the contract tag from git, the tic
   assert.equal(s.steps[7].state, 'done', 'the work after the review began: it was approved');
   assert.equal(s.steps[8].state, 'wait');
   assert.equal(subStates(s.steps[8]), 'Your merges 2 of 3:wait, Contract tag:wait, Tickets created:todo');
-  assert.deepEqual(s.waiting.map((w) => w.why), ['merge chore/starter', 'tag api-v1.0.0 on dev and push it']);
+  assert.deepEqual(s.waiting.map((w) => w.why), ['merge chore/starter into dev (a draft: mark it ready first)', 'tag api-v1.0.0 on dev and push it'], 'no origin: every branch here counts');
 
   sh(dir, 'git', ...G, 'merge', '-q', '--no-ff', '-m', "Merge branch 'chore/starter' into 'main'", 'chore/starter');
   sh(dir, 'git', 'tag', 'api-v1.0.0');
@@ -136,6 +145,25 @@ test('after approval: the owner\'s merges and the contract tag from git, the tic
   assert.equal(subStates(s.steps[8]), 'Your merges 3 of 3:done, Contract tag api-v1.0.0:done, Tickets created 2:done');
   assert.equal(s.steps[8].summary, '3 of 3 merged, api-v1.0.0, 2 tickets');
   assert.equal(s.current, 9, 'the build is next');
+});
+
+test('with an origin: a branch is the owner\'s to merge once pushed; before, the lead is still on it', () => {
+  const folder = bootstrap();
+  write(path.join(folder, 'project.json'), JSON.stringify({ project: { name: 'acme', stack: { backend: 'NestJS 12' } } }));
+  write(path.join(folder, 'bootstrap', 'review.md'), '# Review\n');
+  write(path.join(folder, 'bootstrap', 'project.starter.json'), '{}');
+  const { dir, branch } = client();
+  const remote = temp('forge-steps-origin-');
+  sh(remote, 'git', 'init', '-q', '--bare');
+  sh(dir, 'git', 'remote', 'add', 'origin', remote);
+  branch('chore/architecture', 'dev', null);
+  branch('chore/bootstrap-contract', 'dev', null);
+  branch('chore/starter', 'dev', null);
+  sh(dir, 'git', 'push', '-q', 'origin', 'dev', 'chore/architecture', 'chore/bootstrap-contract');
+  sh(dir, 'git', 'fetch', '-q', 'origin');
+  const s = projectSteps({ folder, main: dir, data: records(folder), progress: NONE });
+  assert.equal(subStates(s.steps[8]), 'Your merges 0 of 3:wait, Contract tag:todo, Tickets created:todo');
+  assert.deepEqual(s.waiting.map((w) => w.why), ['merge chore/architecture, chore/bootstrap-contract into dev (a draft: mark it ready first); chore/starter is not pushed yet: the lead is still on it']);
 });
 
 test('the build: each ticket in flight with where it is, by its agents\' roles as their spawns named them', () => {

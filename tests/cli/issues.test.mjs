@@ -50,6 +50,30 @@ function host(tool, data, env = {}) {
   };
 }
 
+test('a rate limit or a large board: the issues read whole, their histories as far as allowed, the rest at the next read', async () => {
+  const h = host('glab', GITLAB);
+  let r = await readIssues({ main: h.dir, stateDir: h.state, tracker: 'gitlab', env: { ...h.env, FAKE_429: '3' } });
+  assert.equal(r.error, null);
+  assert.equal(r.issues.length, 4, 'the board itself is current');
+  assert.match(r.behind, /^the history of 1 of 4 issues is still to read \(glab api projects\/:id\/issues\/3\/\w+: glab: HTTP 429\); the next read goes on$/);
+  h.reset();
+  r = await readIssues({ main: h.dir, stateDir: h.state, tracker: 'gitlab', env: h.env });
+  assert.deepEqual(h.calls().map((c) => c.split('?')[0]), ['api projects/:id/issues', 'api projects/:id/issues/3/resource_label_events', 'api projects/:id/issues/3/resource_state_events'], 'only #3 is read again');
+  assert.equal(r.behind, null);
+  assert.deepEqual(issueFlow(r.issues).now, { closed: 1, testing: 0, progress: 1, open: 1 });
+
+  // 45 issues: 40 histories this read (two calls each), the other 5 at the next.
+  const many = { issues: Array.from({ length: 45 }, (_, k) => ({ iid: k + 1, title: `T${k + 1}`, state: 'opened', labels: ['status::Todo'], created_at: at(k), updated_at: at(k) })), labels: {}, states: {} };
+  const b = host('glab', many);
+  r = await readIssues({ main: b.dir, stateDir: b.state, tracker: 'gitlab', env: b.env });
+  assert.equal(b.calls().length, 1 + 40 * 2);
+  assert.equal(r.behind, 'the history of 5 of 45 issues is still to read; the next read goes on');
+  b.reset();
+  r = await readIssues({ main: b.dir, stateDir: b.state, tracker: 'gitlab', env: b.env });
+  assert.equal(b.calls().length, 1 + 5 * 2);
+  assert.equal(r.behind, null);
+});
+
 test('the band: a done status counts as closed; In Progress and In Testing have their own', () => {
   assert.equal(band(true, 'In Progress'), 'closed');
   assert.equal(band(false, 'Done'), 'closed');

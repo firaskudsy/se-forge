@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { sh } from '../policy/helpers.mjs';
-import { readStories, readCatalogue, readPlans, readMetrics, reviewRounds, readMerges, readGatesFailed, hours } from '../../core/cli/dashboard/data.mjs';
+import { readStories, readCatalogue, readPlans, readMetrics, reviewRounds, readMerges, readGatesFailed, hours, projectData } from '../../core/cli/dashboard/data.mjs';
 import { union, subtract, length, timeSplit, rework, friction, roles, progress, projectTimeline, SILENT_MS, stageOf, composition, daily, groupBy, replies } from '../../core/cli/dashboard/measures.mjs';
 import { stackedBars, columns, dayStrips, step } from '../../core/cli/dashboard/svg.mjs';
 import { day, weekday, hour, clock, when } from '../../core/cli/dashboard/format.mjs';
@@ -116,6 +116,23 @@ test('the project\'s records: stories, the bootstrap catalogue, plans, metrics, 
   const rounds = reviewRounds(w.team, 'acme/reviews/10');
   assert.deepEqual(rounds.map((r) => [r.at, r.blocker, r.reports]), [[T0 + 20 * M, true, { code: 'APPROVE', security: 'REQUEST CHANGES' }], [T0 + 40 * M, false, { security: 'PASS' }]]);
   assert.deepEqual([...readMerges(w.client, 'dev')], [[11, T0 + 130 * M], [10, T0 + 50 * M]]);
+});
+
+test('a line\'s ticket, the hooks\' guess from a spawn\'s words, stands for a known ticket or a ticket\'s own agents; never an epic', () => {
+  const w = world();
+  // During the bootstrap, a contract writer's prompt named "#1" (epic E1's issue) and an architect's "#7"; after it,
+  // an engineer works on #40, a follow-up no record names yet.
+  const spawn = (min, id, what, ticket) => [
+    { at: at(min), event: 'tool.start', who: 'lead', tool: 'Agent', id: `s-${id}`, what, ticket },
+    { at: at(min), event: 'tool.done', who: 'lead', tool: 'Agent', id: `s-${id}`, what, spawned: id, ticket },
+    { at: at(min + 1), event: 'agent.start', who: id, agent: id, ticket },
+    { at: at(min + 5), event: 'agent.stop', who: id, agent: id, ticket, ...tokens(`r-${id}`, 'claude-sonnet-5-5', 100) },
+  ];
+  const lines = [...spawn(300, 'c4-writer', 'contract-analyst: Contract C4 write 1: E5 ops 1-11', '#1'), ...spawn(310, 'adr-7', 'architect: ADR #7', '#7'), ...spawn(320, 'fu-40', 'backend-engineer: follow-up #40', '#40')];
+  write(path.join(w.state, 'timeline-2026-10.jsonl'), `${lines.map((e) => JSON.stringify(e)).join('\n')}\n`);
+  const d = projectData({ main: w.client, folder: w.folder, teamRoot: w.team, base: 'dev', stateDir: w.state });
+  assert.deepEqual(d.tickets.map((t) => t.num), [10, 11, 12, 40]);
+  assert.deepEqual([...new Set(d.lines.map((e) => e.ticket ?? '-'))].sort(), ['#40', '-'], 'the bootstrap\'s lines keep their tokens, without a ticket');
 });
 
 test('intervals: union, subtract, length', () => {

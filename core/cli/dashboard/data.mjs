@@ -17,6 +17,7 @@ import { readReport } from '../merge.mjs';
 import { reviewRounds } from '../../policy/lib/reports.mjs';
 import { readTimeline, attribute } from '../timeline.mjs';
 import { readShots } from '../shot.mjs';
+import { spawnTypes, ticketRole } from './measures.mjs';
 
 const read = (file) => { try { return fs.readFileSync(file, 'utf8'); } catch { return ''; } };
 const T = (e) => Date.parse(e.at);
@@ -63,16 +64,23 @@ export function readCatalogue(folder) {
     if (/^\s*-\s*\*\*Stor(y|ies):\*\*/.test(line)) current.stories = [...new Set(line.match(STORY) || [])];
     if (/^\s*-\s*\*\*Areas:\*\*/.test(line)) current.areas = AREAS(line.replace(/^.*\*\*Areas:\*\*/, ''));
   }
+  // Each row's cells found by what they hold, not where: "| T-01 | Title | #10 | E1 | db |", or with an empty first
+  // column as some leads write it. The epics' rows give their issue numbers, which are no ticket's.
   const tickets = [];
+  const epics = [];
   for (const line of read(path.join(folder, 'bootstrap', 'tickets-created.md')).split('\n')) {
     const cells = line.split('|').map((c) => c.trim());
-    const t = /^(?:E\d+-)?T-?\d+[a-z]?$/.test(cells[1] || '') ? cells[1] : null;
-    const num = /^#(\d+)$/.exec(cells[3] || '')?.[1];
-    if (!t || !num) continue;
+    const i = cells.findIndex((c) => /^(?:E\d+-)?T-?\d+[a-z]?$/.test(c) || /^E\d+$/.test(c));
+    const n = i < 0 ? -1 : cells.findIndex((c, k) => k > i && /^#\d+$/.test(c));
+    if (n < 0) continue;
+    const t = cells[i];
+    const num = Number(cells[n].slice(1));
+    if (/^E\d+$/.test(t)) { epics.push(num); continue; }
     const c = byT.get(t) ?? { stories: [], areas: [] };
-    tickets.push({ num: Number(num), t, title: (cells[2] || c.title || '').replace(/^(?:E\d+-)?T-?\d+[a-z]?\b[\s:.—–-]*/, ''), epic: cells[4] || null, stories: c.stories, areas: c.areas.length ? c.areas : AREAS(cells[5]), estimate: c.estimate ?? null });
+    const epic = cells[n + 1] && !/^[—–-]$/.test(cells[n + 1]) ? cells[n + 1] : null;
+    tickets.push({ num, t, title: ((n > i + 1 ? cells[i + 1] : '') || c.title || '').replace(/^(?:E\d+-)?T-?\d+[a-z]?\b[\s:.—–-]*/, ''), epic, stories: c.stories, areas: c.areas.length ? c.areas : AREAS(cells[n + 2]), estimate: c.estimate ?? null });
   }
-  return { tickets, planned: byT.size, estimated: [...byT.values()].filter((c) => c.estimate).length };
+  return { tickets, epics, planned: byT.size, estimated: [...byT.values()].filter((c) => c.estimate).length };
 }
 
 export function readPlans(folder) {
@@ -168,14 +176,22 @@ export function projectData({ main, folder, teamRoot, base, stateDir, repos = nu
   }
   // Claude Code's own helpers are no one's agents (forge timeline counts them apart); they leave no transcript, so no
   // reply of theirs is on a line.
-  const lines = attribute(readTimeline(stateDir).lines.filter((e) => !e.helper)).map((e) => {
+  const raw = attribute(readTimeline(stateDir).lines.filter((e) => !e.helper)).map((e) => {
     if (!e.who) return e;
     const who = role(e.who);
     return OVERHEAD.has(who) ? { ...e, who, ticket: undefined } : who === e.who ? e : { ...e, who };
   });
+  // A line's ticket is the hooks' guess from its spawn's words (a "#1" in a prompt). It stands when the records know
+  // the ticket (the catalogue, a plan, metrics.md, a merge) or a planner, an engineer, a reviewer or QA worked on it:
+  // the bootstrap's agents work for no ticket, and an epic is no ticket.
+  const numOf = (e) => Number(String(e.ticket || '').slice(1));
+  const typeOf = spawnTypes(raw);
+  const known = new Set([...catalogue.tickets.map((t) => t.num), ...plans.keys(), ...metrics.keys(), ...merges.keys(),
+    ...raw.filter((e) => e.agent && ticketRole(typeOf(e))).map(numOf)]);
+  for (const n of catalogue.epics) known.delete(n);
+  const lines = raw.map((e) => (e.ticket && !known.has(numOf(e)) ? { ...e, ticket: undefined } : e));
   const rel = path.relative(teamRoot, folder);
-  const nums = new Set([...catalogue.tickets.map((t) => t.num), ...plans.keys(), ...metrics.keys(), ...merges.keys(),
-    ...lines.map((e) => Number(String(e.ticket || '').slice(1))).filter((n) => n > 0)]);
+  const nums = new Set([...known].filter((n) => n > 0));
   const reviewsDir = path.join(folder, 'reviews');
   const tickets = [...nums].sort((a, b) => a - b).map((num) => {
     const c = catalogue.tickets.find((t) => t.num === num);

@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { git } from '../../policy/lib/context.mjs';
-import { stageOf } from './measures.mjs';
+import { stageOf, spawnTypes } from './measures.mjs';
 
 const read = (file) => { try { return fs.readFileSync(file, 'utf8'); } catch { return ''; } };
 const has = (file) => fs.existsSync(file);
@@ -17,12 +17,15 @@ const cut = (s, n) => (s.length > n ? `${s.slice(0, n - 1).replace(/\s+\S*$/, ''
 const semver = (v) => v.split('.').map(Number);
 const newer = (a, b) => { const x = semver(a); const y = semver(b); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i]; return false; };
 
-// What the client repo's git says: branch names (local and origin's), tags, and merge commits by the branch merged
+// What the client repo's git says: branch names (local and origin's, and origin's apart), tags, and merge commits by the branch merged
 // (GitLab's "Merge branch 'x' into 'dev'", git's own "Merge branch 'x' into dev", GitHub's "Merge pull request #3 from
 // owner/x"). A squash merge leaves no merge commit, so it is not seen.
 export function repoFacts(dir) {
-  if (!dir) return { refs: new Set(), tags: [], merges: [], contains: () => false };
-  const refs = new Set((git(dir, ['for-each-ref', '--format=%(refname:short)', 'refs/heads', 'refs/remotes/origin']).out || '').split('\n').filter(Boolean).map((r) => r.replace(/^origin\//, '')));
+  if (!dir) return { refs: new Set(), pushed: null, tags: [], merges: [], contains: () => false };
+  const names = (git(dir, ['for-each-ref', '--format=%(refname:short)', 'refs/heads', 'refs/remotes/origin']).out || '').split('\n').filter(Boolean);
+  const refs = new Set(names.map((r) => r.replace(/^origin\//, '')));
+  // What origin has: null for a repository without one.
+  const pushed = git(dir, ['remote', 'get-url', 'origin']).ok ? new Set(names.filter((r) => r.startsWith('origin/')).map((r) => r.slice(7))) : null;
   const tags = (git(dir, ['tag', '-l']).out || '').split('\n').filter(Boolean);
   const merges = [];
   for (const row of (git(dir, ['log', '--all', '--merges', '--format=%H%x09%s']).out || '').split('\n')) {
@@ -35,22 +38,12 @@ export function repoFacts(dir) {
     const ref = git(dir, ['rev-parse', '--verify', '-q', `origin/${branch}`]).ok ? `origin/${branch}` : branch;
     return git(dir, ['merge-base', '--is-ancestor', hash, ref]).ok;
   };
-  return { refs, tags, merges, contains };
+  return { refs, pushed, tags, merges, contains };
 }
 
 // A sub-step: done, or open; the owner's (mine) are waiting for you while due (there is something to act on).
 // skip: not part of this project (no contract, so no contract tag).
 const sub = (label, done, more = {}) => ({ label, done: Boolean(done), mine: false, due: false, skip: false, why: '', ...more });
-
-// The role behind each agent: its spawn's type ("db-reviewer: DB review #6"), since a lead may name its agents freely.
-function roles(lines) {
-  const types = new Map();
-  for (const e of lines) {
-    const type = e.spawned && /^([\w-]+):/.exec(String(e.what || ''))?.[1];
-    if (type) types.set(e.spawned, type);
-  }
-  return (e) => (e.agent && types.get(e.agent)) || e.who;
-}
 
 // The tickets in flight: a ticket on the board (or, with no board, in the records) that a planner, an engineer, a
 // reviewer or QA worked on, not merged and not closed, the latest first; each with where it is: the last such agent's
@@ -60,7 +53,7 @@ function roles(lines) {
 const PIPE = ['Plan', 'Build', 'Review', 'Merge'];
 const AT = { build: 1, review: 2, qa: 2 };
 function inFlight({ lines, data, board, all }) {
-  const roleOf = roles(lines);
+  const roleOf = spawnTypes(lines);
   const known = board ? new Set(board.map((b) => b.num)) : new Set(data.tickets.filter((t) => t.planned || t.t).map((t) => t.num));
   const last = new Map();
   for (const e of lines) {
@@ -165,11 +158,13 @@ export function projectSteps({ folder, main, base = 'dev', promote = ['staging',
     // and the lead creates the tickets (on the board, or listed in tickets-created.md).
     const contract = spec !== '' || seen('chore/bootstrap-contract');
     const wanted = ['chore/architecture', ...(contract ? ['chore/bootstrap-contract'] : []), ...(has(path.join(boot, 'project.starter.json')) || seen('chore/starter') ? ['chore/starter'] : [])];
-    const open = wanted.filter((b) => seen(b) && !merged(b));
+    // A merge request is the owner's once its branch is on origin; before, the lead is still on it.
+    const open = wanted.filter((b) => (repo.pushed ? repo.pushed.has(b) : seen(b)) && !merged(b));
+    const building = wanted.filter((b) => repo.pushed && !repo.pushed.has(b) && repo.refs.has(b) && !merged(b));
     const tag = repo.tags.find((t) => t.startsWith('api-v'));
     const created = data.catalogue.length || (board ?? []).length;
     step('setup', 'Setup', [wanted.length ? `${wanted.filter(merged).length} of ${wanted.length} merged` : '', tag ?? '', created ? `${created} tickets` : ''].filter(Boolean).join(', '), [
-      sub(`Your merges ${wanted.filter(merged).length} of ${wanted.length}`, wanted.every(merged), { mine: true, due: open.length > 0, why: `merge ${open.join(', ')}` }),
+      sub(`Your merges ${wanted.filter(merged).length} of ${wanted.length}`, wanted.every(merged), { mine: true, due: open.length > 0, why: `merge ${open.join(', ')} into ${base} (a draft: mark it ready first)${building.length ? `; ${building.join(', ')} is not pushed yet: the lead is still on it` : ''}` }),
       sub(tag ? `Contract tag ${tag}` : 'Contract tag', Boolean(tag), { mine: true, skip: !contract, due: merged('chore/bootstrap-contract'), why: `tag api-v${version || '1.0.0'} on ${base} and push it` }),
       sub(created ? `Tickets created ${created}` : 'Tickets created', created > 0),
     ]);

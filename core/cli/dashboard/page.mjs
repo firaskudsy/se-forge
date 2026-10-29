@@ -79,7 +79,7 @@ export function dashboardModel({ main, folder, teamRoot, base, stateDir, prices 
   const merges = all.filter((t) => t.mergedAt).map((t) => ({ at: t.mergedAt, title: `${t.id}${t.title ? ` ${t.title}` : ''} merged ${when(t.mergedAt)}` }));
   const shots = data.shots.filter((s) => s.at >= since && (!only || only.includes(s.ticket))).map((s, i) => ({ ...s, n: i + 1 }));
   const marks = shots.map((s) => ({ at: s.at, href: `#shot-${s.n}`, title: `Screenshot ${clock(s.at)}${s.ticket ? ` · #${s.ticket}` : ''} · ${s.what}` }));
-  const tracked = issues ? { ...issueFlow(issues.issues), host: issues.host, readAt: issues.readAt, error: issues.error } : null;
+  const tracked = issues ? { ...issueFlow(issues.issues), host: issues.host, readAt: issues.readAt, error: issues.error, behind: issues.behind ?? null } : null;
   const origin = (dir) => (dir ? git(dir, ['remote', 'get-url', 'origin']).out : '');
   const link = issueLinks({ issues: issues?.issues ?? [], remote: origin(main), tracker });
   const mine = new Set(Object.values(stackGuides(stack)).flat());
@@ -306,7 +306,7 @@ export function renderPage(m, { project }) {
   const cIssues = !iq ? '<p class="empty">No tracker is set for this project.</p>'
     : !iq.points.length ? `<p class="empty">No issue history: ${iq.error ? `${esc(iq.host)} could not be read (${esc(iq.error)}).` : iq.readAt ? 'the tracker has no issues yet.' : 'not read yet; run forge dashboard without --offline.'}</p>`
       : legend(ISSUE_KEYS.slice().reverse()) + flow({ points: iq.points, keys: ISSUE_KEYS, from: Number.isFinite(m.since) ? Math.max(m.since, iq.points[0].at) : iq.points[0].at, to: m.now })
-        + `<p class="fc">Now: <b>${esc(countsText(iq.now))}</b>${iq.epics ? ` (${iq.epics === 1 ? 'the epic is' : `${iq.epics} epics are`} not counted: an epic stays open while its tickets close)` : ''}. From ${read}${iq.error ? `; it could not be read now (${esc(iq.error)}), so this is the last read` : ''}.</p>`;
+        + `<p class="fc">Now: <b>${esc(countsText(iq.now))}</b>${iq.epics ? ` (${iq.epics === 1 ? 'the epic is' : `${iq.epics} epics are`} not counted: an epic stays open while its tickets close)` : ''}. From ${read}${iq.error ? `; it could not be read now (${esc(iq.error)}), so this is the last read` : ''}${iq.behind ? `; ${esc(iq.behind)}` : ''}.</p>`;
 
   // Run the app (decision 123): the steps for this project, and whether it runs now (the page asks the address).
   const ap = m.app;

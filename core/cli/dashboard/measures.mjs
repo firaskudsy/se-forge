@@ -170,6 +170,18 @@ export function stageOf(who) {
   return 'other';
 }
 
+// The role behind each agent: its spawn's type ("db-reviewer: DB review #6"), since a lead may name its agents freely.
+export function spawnTypes(lines) {
+  const types = new Map();
+  for (const e of lines) {
+    const type = e.spawned && /^([\w-]+):/.exec(String(e.what || ''))?.[1];
+    if (type) types.set(e.spawned, type);
+  }
+  return (e) => (e.agent && types.get(e.agent)) || e.who;
+}
+// A ticket's own work: its planner, its engineers, its reviewers and QA.
+export const ticketRole = (role) => role === 'planner' || ['build', 'review', 'qa'].includes(stageOf(role));
+
 const add = (o, k, v) => { o[k] = (o[k] || 0) + v; return o; };
 
 // Tokens and cost of some replies grouped by a key: { key: { tokens, cost } }.
