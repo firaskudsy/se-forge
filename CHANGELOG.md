@@ -8,6 +8,32 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ## [Unreleased]
 
+### Added
+- **Your turn** (decision 144): everything only the owner can do comes last in the lead's message, the same every
+  time: "Your turn (N steps, in this order)", then numbered steps, one action each, each saying where (in the session
+  with `!`, a terminal in a named folder, the browser and which buttons, another machine), the exact command to paste
+  with real values, and `Done when:` what the owner sees when it worked; then what to reply. Never a step without
+  the how ("make the runner Docker-capable"), never one the lead could take itself, and none of the lead's own next
+  moves in the list. A later message that still waits repeats the block with the done steps ticked. It replaces the
+  `A. Done · B. Later` action shape of decision 136; in `core/LEAD.md` (every lead session starts with it), skill
+  `ask-owner` (the format, rules and an example) and the progress report.
+
+### Fixed
+- `forge tracker create` on gitlab.com: the new issue's address is now `/-/work_items/<n>` there, which the GitLab
+  adapter did not read, so every create reported a failure after making the issue (and a retry made a duplicate).
+  It reads both `/-/issues/<n>` and `/-/work_items/<n>`.
+- The dashboard read no tickets from a `tickets-created.md` whose table starts with an empty column, as a lead may
+  write it: its cells are now found by what they hold. The epics' rows give their issue numbers, which are no
+  ticket's.
+- Tickets that are not tickets: a line's ticket is the hooks' guess from a spawn's words (a `#1` in a contract
+  writer's prompt), and the dashboard listed those as started tickets. A guess now stands only for a ticket the
+  records know, or one a planner, an engineer, a reviewer or QA worked on; never for an epic.
+- The issues over time on a large gitlab.com board: the first read made two calls per issue, eight at once, and the
+  free plan's limit (100 calls a minute) refused it every time, so the board was never read. A read now takes at
+  most 40 issues' histories, keeps what it got when a limit stops it, and the next read goes on from there.
+- The stepper's Setup: a branch the lead has not pushed yet (no merge request) was shown as the owner's to merge.
+  It now waits for the owner once it is on origin, and the line says the merge request may be a draft to mark ready.
+
 ## [0.2.42] - 2026-10-29
 
 ### Added

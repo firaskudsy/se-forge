@@ -42,6 +42,8 @@ test('session and lane injections carry the rules and facts within the 10,000 ch
   // Only the main session asks the owner, so only it gets the lead's rules (decision 136).
   assert.match(lead, /# Rules for the main session \(the lead\)/);
   assert.match(lead, /AskUserQuestion\. Up to 4 questions per call/);
+  // What the owner has to do, as one block of steps in order (decision 144).
+  assert.match(lead, /\*\*Your turn\*\* \(N steps, in this order\)/);
   assert.doesNotMatch(lane, /# Rules for the main session/);
   // Decision 138: the lead runs a plan's or an agent's questions past the owner-assistant first.
   assert.match(lead, /spawn `owner-assistant` once with all of them/);

@@ -97,7 +97,7 @@ claude
 | A merged ticket doesn't work | tell the lead; it files a `[Bug]` naming the ticket (merged tickets close by themselves) |
 | Stop for the day, close the laptop, or go offline | `/pause` until it says "Safe to close"; `/resume` in a fresh session later |
 | See what the agents left behind | `forge worktrees` (`--clean` removes the finished ones) |
-| Answer the kit | Every question comes as choices: pick in the session, or reply like `1A 2B 3[31]` to a written list; your own words always work too. What you answered before, the owner-assistant answers for you; the progress report lists it under "Decided for you" to change |
+| Answer the kit | Every question comes as choices: pick in the session, or reply like `1A 2B 3[31]` to a written list; your own words always work too. What only you can do comes last as **Your turn**: steps in order, each with where, the command to paste and how you know it worked; do them, then reply `done`. What you answered before, the owner-assistant answers for you; the progress report lists it under "Decided for you" to change |
 | A ticket parked at its limit | `forge limits` shows each open ticket's lanes, review rounds with blockers and QA fails (4, 2, 2 by default); `forge limits lift 12` gives it one more allowance (a person only) |
 
 ## Branches

@@ -21,6 +21,14 @@ Issues: <the Issues line as printed>
    [ ] #<id> <title> (<…>)
 Reply like 1A 2[#id], or in your own words.
 
+**Your turn** (<n> steps, in this order)
+1. **<what to do, as a verb>** · <here, in this session | in a terminal, in <folder> | in the browser: <URL>, then <buttons>>:
+   ```
+   <the exact command, with real values>
+   ```
+   Done when: <what the owner sees when it worked>
+Reply **done**, or the step that failed and what it printed.
+
 ## Decided for you
 The owner-assistant answered these from your earlier answers (decision 138). Tick any you want to answer yourself:
 [ ] #<id> Q<n>: <the question in a few words> → <letter>. <the answer> (<precedent: kind | obvious: source>)
