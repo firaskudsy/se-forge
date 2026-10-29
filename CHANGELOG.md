@@ -8,6 +8,16 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ## [Unreleased]
 
+### Changed
+- **The finish card leads with the AI's own time** (decision 145, revised): it is now **Finish (AI time)**, and its
+  number is the AI work left in days around the clock (`about 27 days`, `21–33 days nonstop`); when that lands on the
+  calendar at the project's pace comes second (`on the calendar 21 Feb 2027, at 5.6 h a day`), so the hours the AI
+  is not running are not mistaken for its speed. From three merged tickets on, the work is their working time per
+  ticket.
+- The planners' estimates are not the agents' hours: lunch-pool's 23 merged tickets took 0.40 of their estimates in
+  working time. Until a project merges its own, its estimates now count at 0.40 (budget-guru: 500–782 hours of AI
+  work instead of 1,247–1,951); its first merged tickets then set their own ratio.
+
 ## [0.2.44] - 2026-10-29
 
 ### Added

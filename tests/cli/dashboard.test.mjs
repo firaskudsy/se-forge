@@ -391,8 +391,8 @@ test('forge dashboard: one page with fifteen charts, the architecture, the scree
   // The stepper between the totals and the tabs (decision 143); its current step pulses, unless the viewer asks for less motion.
   assert.ok(html.indexOf('<section class="stepper"') > html.indexOf('<div class="kpis">') && html.indexOf('<section class="stepper"') < html.indexOf('<nav class="tabs"'));
   // The finish card after the tickets and stories (decision 145).
-  assert.deepEqual([...html.matchAll(/<div class="kpi"[^>]*><span>([^<]+)<\/span>/g)].slice(0, 4).map((x) => x[1]), ['Tickets merged', 'Stories done', 'Finish (estimate)', 'Tokens']);
-  assert.match(html, /<span>Finish \(estimate\)<\/span><b>not yet<\/b><small>no AI work in the last 14 days to take the pace from<\/small>/);
+  assert.deepEqual([...html.matchAll(/<div class="kpi"[^>]*><span>([^<]+)<\/span>/g)].slice(0, 4).map((x) => x[1]), ['Tickets merged', 'Stories done', 'Finish (AI time)', 'Tokens']);
+  assert.match(html, /<span>Finish \(AI time\)<\/span><b>not yet<\/b><small>no AI work in the last 14 days to take the pace from<\/small>/);
   assert.match(html, /<li class="st-now" aria-current="step" title="10\. Build: now · 2 of 3 merged"><i>10<\/i><span>Build<\/span><\/li>/);
   assert.match(html, /\.stp li\[aria-current\]>i::after\{[^}]*animation:st-pulse 1\.8s ease-out infinite\}/);
   assert.match(html, /@media \(prefers-reduced-motion:reduce\)\{\.stp li\[aria-current\]>i::after\{animation:none;display:none\}\}/);

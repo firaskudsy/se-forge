@@ -172,22 +172,29 @@ lead's turns, each moment once (chart 1's top lane, added up). It leaves out the
 15 minutes with nothing happening, such as a laptop asleep or a closed session. On clinic-booking: 9 h 18 min of
 work in 38.6 hours from the first line to the last, beside 13 h 07 min waiting for you.
 
-**Finish (estimate)** (decision 145), the KPI after the tickets and stories, is when every step could be done, the
-release too. It adds up the work left and divides it by the project's own pace:
-- **The pace:** the AI's working time a calendar day over the last 14 days (or since the first line). The nights, the
-  weekends and the waits for you are in it as they have been, so hours of work become calendar days.
-- **The bootstrap's steps still to do,** at the bootstrap's pace so far: its working time over the steps behind it.
-- **The build's tickets not merged.** From three merged tickets on, chart 2's forecast. Before, the drafts' estimates
-  (`tickets.md`; a planned ticket's own plan), a missing one at the others' median, less the work the open tickets
-  have had. When one or two tickets have merged, every estimate is multiplied by how long those took against theirs
-  (`×1.40 as the 2 merged took`). A draft is matched to its issue by `tickets-created.md`; a merge it cannot match
-  takes the first unmatched draft, since the build goes foundations first.
-- **The release,** as one more ticket.
+**Finish (AI time)** (decision 145), the KPI after the tickets and stories, is how much AI work is left until every
+step is done, the release too, and when that lands on the calendar:
+- **The work left,** in hours of AI working time:
+  - the bootstrap's steps still to do, at the bootstrap's pace so far (its working time over the steps behind it);
+  - the build's tickets not merged. From three merged tickets on, at their working time per ticket. Before, the
+    drafts' estimates (`tickets.md`; a planned ticket's own plan), a missing one at the others' median, less the work
+    the open tickets have had, multiplied by what agents take against such estimates: 0.40 before the project's own
+    merges (lunch-pool's 23 merged tickets took 0.40 of their estimates' middle in working time, median 0.37), then
+    by how long its first one or two merged tickets took against theirs (`×0.55 as the 2 merged took`). A draft is
+    matched to its issue by `tickets-created.md`; a merge it cannot match takes the first unmatched draft, since the
+    build goes foundations first;
+  - the release, as one more ticket.
+- **The card's number** is that work around the clock, in days: what the agents themselves need (`about 27 days`,
+  `21–33 days nonstop`).
+- **On the calendar,** the second line: the work at the project's pace, the AI's working time a calendar day over the
+  last 14 days (or since the first line), with the nights, the weekends and the waits for you in it as they have been.
+  From three merged tickets on, the build's part is chart 2's forecast, so the card and the chart agree. The gap
+  between the two lines is the hours the AI is not running, not its speed.
 
-The card shows the middle date, then the calendar days left on average with their low and high (`about 70 days left
-(52–89)`) and the pace; hover for the dates' range, the hours of work and what they were made of. With no AI work in the last 14 days, or no estimates and fewer than three merged
-tickets, it says why it cannot tell. It reads the whole project, whatever `--days` or `--ticket` say. Before a ticket
-merges it is only as good as the estimates; each merge corrects it.
+Hover for the hours of work, what they were made of, the calendar range and the days left. With no AI work in the
+last 14 days, or no estimates and fewer than three merged tickets, it says why it cannot tell. It reads the whole
+project, whatever `--days` or `--ticket` say. Before a ticket merges it is only as good as the estimates; each merge
+corrects it.
 
 **Where the project is** (decision 143), between the KPIs and the tabs: eleven steps, the bootstrap's nine stages and
 then the build and the release, each with two to four sub-steps, read from the records, never from the bootstrap's
@@ -312,7 +319,7 @@ the model wrote, its thinking included. `forge dashboard --text` prints the same
 (decision 113). `--days` and `--ticket` work as for the page. In order:
 - **Kit:** the se-forge version this checkout runs (`.forge/kit`, what its hooks, agents and skills use), with the project's pin when it differs (`forge sync` moves the checkout to it) and the `forge` command's own version when it differs; the page shows the same words under its title;
 - **Repos:** the project's repository and its folder in the team repo on their host, from their `origin` remotes (a system's member repositories too; none for a remote on this machine); the page links them beside its title;
-- the KPIs, the forecast, **Finish:** the finish card's date and range, the days left on average, the hours of work and the pace, the scope (the bootstrap's tickets and the ones added since, when the bootstrap has a ticket list) and the time of the last line in the timeline;
+- the KPIs, the forecast, **Finish:** the finish card's AI work left (days nonstop, hours) and when it lands on the calendar at the pace, the scope (the bootstrap's tickets and the ones added since, when the bootstrap has a ticket list) and the time of the last line in the timeline;
 - **Issues:** the tracker's issues now by status (open, in progress, In Testing, closed; epics not counted), with when they were read, or the last read and why the tracker could not be read now (chart 3);
 - **Open:** each ticket started and not merged, with its plan's `Status:` line, estimate, time so far split as in chart 4, review rounds, agents and cost;
 - **Not started**, then **Merged**, newest first (the ten newest in full);

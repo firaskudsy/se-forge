@@ -191,7 +191,7 @@ export function renderPage(m, { project }) {
   const kpis = [
     ['Tickets merged', `${p.ticketsDone.length} of ${p.totalTickets}`],
     ['Stories done', p.totalStories ? `${p.storiesDone.length} of ${p.totalStories}` : 'no story list'],
-    ...(end ? [['Finish (estimate)', end.value, end.more, `Every step done, the release too: ${end.line}.`]] : []),
+    ...(end ? [['Finish (AI time)', end.value, end.more, `Until every step is done, the release too: ${end.line}.`]] : []),
     ['Tokens', fmt(sums.tokens), splitText(sums), SPLIT_HINT],
     ['API cost', money ? dollars(sums.cost) : 'no prices set', money ? splitText(sums, 'cost') : '', SPLIT_HINT],
     ['Working time', duration(sums.working)],
