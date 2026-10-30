@@ -8,6 +8,8 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ## [Unreleased]
 
+## [0.2.46] - 2026-10-29
+
 ### Added
 - **Time per step** in the dashboard's Time tab (decision 146): each step of the stepper begun so far as AI time
   (agents, gates, the lead's turns), owner time (the work waiting for you) and idle (nobody working), with the totals.
