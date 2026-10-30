@@ -160,7 +160,7 @@ joins the timeline with the bootstrap's stories and tickets, the plans, `metrics
 team repo's history and the merges into `dev`; the one server it calls is the tracker's, for the issues chart
 (`--offline` skips it and draws from the last read). The cost charts show dollars once
 `project.prices` is set, tokens until then. The KPIs stay on top; the charts, the app's screenshots and the table
-are in nine tabs, and the page remembers the open tab in its address (`dashboard.html#cost`).
+are in ten tabs, and the page remembers the open tab in its address (`dashboard.html#cost`).
 
 The page is a snapshot of the moment it was built (the line under the title says when). With `--watch` (decision
 126) forge makes a new one every few minutes and writes a small stamp next to it (`dashboard.stamp.js`, the build's
@@ -210,7 +210,7 @@ README (which the lead may not have brought up to date):
 | Tickets | Drafts (`tickets.md`: `### T-01`, `### T1 —`, `### E1-T1` and `### E2-T3b` headings) · Estimates *n* of *m* |
 | Panel | Seats (`panel/<seat>.md`) · Summary · Reruns *n* of *m* (the Applied table's rows with a Done cell) |
 | Your review | Written (`review.md`) · **Your approval**: done once the work after it began |
-| Setup | **Your merges** (`chore/architecture`, `chore/bootstrap-contract`, `chore/starter` merged; one waits for you once its branch is on origin, before that the lead is still on it) · **Contract tag** (`api-v*`) · Tickets created (`tickets-created.md`, else the board) |
+| Setup | Merges (`chore/architecture`, `chore/bootstrap-contract`, `chore/starter` merged, by the lead with `forge merge`, decision 148) · Contract tag (`api-v*`, set by `forge merge`) · Tickets created (`tickets-created.md`, else the board) |
 | Build | one row per ticket in flight: Plan · Build · Review · Merge, by the role of the last agent on it |
 | Release | **Release MR** (the newest `chore/release-vX.Y.Z` merged into `dev`) · **Promotions** (that merge on each `branches.promote` branch) · **Tag** (`vX.Y.Z`) |
 
@@ -219,8 +219,8 @@ request #3 from acme/chore/starter"); a squash merge leaves none, so it is not s
 that has begun, or the next one when that one is complete; the release counts once the build is (every ticket on the
 board closed, or with no board every draft merged). Before the current step, a sub-step with nothing to show counts as
 done, since the work moved on (the contract's API check leaves no record, for one); a step with nothing to show at all
-was skipped. The owner's sub-steps (in bold) are the exception: while there is something to act on (a proposal, a
-branch, a merged contract) and it is not done, the step waits for you, amber. A ticket is in flight when a planner, an
+was skipped. The owner's sub-steps (in bold) are the exception: while there is something to act on (a proposal, the
+review, a release to promote) and it is not done, the step waits for you, amber. A ticket is in flight when a planner, an
 engineer, a reviewer or QA worked on it (by the role its spawn named, as `db-reviewer: DB review #6`, since a lead may
 name its agents freely), it is on the board, and it is neither merged nor closed; the bootstrap's own agents count for
 no ticket, even when the timeline guessed one from their spawn's words. It waits for you when its plan says `waiting
@@ -287,6 +287,14 @@ document readable in the page with where it comes from and a download of its Mar
 The diagrams are drawn with mermaid-cli in Docker when the page is built, all new ones in one run, and kept in
 `.forge/state/diagrams/`; without Docker they show as their text.
 
+**On hold** (decision 147): every ticket that waits, neither merged nor closed: its plan's status says on hold, waiting
+for the owner or blocked (decisions 127, 139), or the board's status is On hold or Blocked. For each: what it waits
+for (your answer, its limit, another ticket), when it was asked, the questions its status names as its plan's section 6
+writes them, the reply to paste in the lead's session with each question's recommended answer filled in (`#12 Q1 b,
+Q2 a`; a `?` where the plan recommends none), or `! forge limits lift 12` for one at its limit, and the tickets
+waiting behind it (their `Depends on:` names it, or they are blocked on it). The tab shows how many. `forge dashboard
+--text` prints the same as its `On hold:` line.
+
 **Run the app** (decision 123): how to see the app as it is now. The page checks the app's address every 5 seconds
 and says whether it answers. The steps are this project's: `forge app up` in its folder (with a Copy button), which
 builds and starts the services of the app's Compose file (the one no other includes, such as `frontend/compose.yaml`
@@ -320,6 +328,7 @@ the model wrote, its thinking included. `forge dashboard --text` prints the same
 (decision 113). `--days` and `--ticket` work as for the page. In order:
 - **Kit:** the se-forge version this checkout runs (`.forge/kit`, what its hooks, agents and skills use), with the project's pin when it differs (`forge sync` moves the checkout to it) and the `forge` command's own version when it differs; the page shows the same words under its title;
 - **Repos:** the project's repository and its folder in the team repo on their host, from their `origin` remotes (a system's member repositories too; none for a remote on this machine); the page links them beside its title;
+- **On hold:** every ticket that waits, as the On hold tab (decision 147);
 - the KPIs, the forecast, **Finish:** the finish card's AI work left (days nonstop, hours) and when it lands on the calendar at the pace, the scope (the bootstrap's tickets and the ones added since, when the bootstrap has a ticket list) and the time of the last line in the timeline;
 - **Issues:** the tracker's issues now by status (open, in progress, In Testing, closed; epics not counted), with when they were read, or the last read and why the tracker could not be read now (chart 3);
 - **Open:** each ticket started and not merged, with its plan's `Status:` line, estimate, time so far split as in chart 5, review rounds, agents and cost;

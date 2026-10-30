@@ -67,8 +67,8 @@ function context(cwd, env) {
   const top = git(cwd, ['rev-parse', '--show-toplevel']);
   if (!top.ok) throw new ApiError('Run forge api inside the project\'s git repository.');
   const main = mainRootOf(cwd, env);
-  const { project } = loadConfig(main, env);
-  return { root: top.out, main, api: project.api, project };
+  const { project, config } = loadConfig(main, env);
+  return { root: top.out, main, api: project.api, project, config };
 }
 
 export function check(o, env, cwd, out) {
@@ -114,6 +114,71 @@ export function check(o, env, cwd, out) {
   if (problems.length) { out(`NOT OK: ${problems.join('; ')}`); return 1; }
   out(`ok: ${path.relative(cwd, spec) || spec} version ${revV?.join('.')}`);
   return 0;
+}
+
+// The spec as a ref has it (origin/<branch>), checked as forge api check checks it, for forge merge (decision 148):
+// { ok, breaking, version, text }.
+export function checkAt(env, cwd, ref) {
+  const { root, api } = context(cwd, env);
+  if (!api.spec) throw new ApiError('No spec: set project.api.spec.');
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'forge-api-at-')));
+  try {
+    const lines = [];
+    const code = check({ spec: extract(root, ref, api.spec, tmp) }, env, cwd, (l) => lines.push(l));
+    const text = lines.join('\n');
+    return { ok: code === 0, breaking: /^breaking changes against .*: YES$/m.test(text), version: /^ok: .* version (\d+\.\d+\.\d+)$/m.exec(text)?.[1] ?? null, text };
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+// forge api apply <draft> [--ticket <n>] [--breaking-approved] (decision 148): the lead puts a contract draft on its own
+// branch from the base branch and opens its merge request, ready: chore/<n>-contract from
+// .forge/project/contracts/<n>-<slug>.yaml, or chore/bootstrap-contract from .forge/project/bootstrap/contract.yaml.
+// The draft is checked first as forge api check checks it; a breaking change needs the owner's decision
+// (--breaking-approved, once they gave it). forge merge <branch> then merges it and tags api-v<version>.
+export function apply(o, env, cwd, out) {
+  const { root, api, project, config } = context(cwd, env);
+  const usage = 'forge api apply <draft> [--ticket <n>] [--breaking-approved]';
+  if (typeof o._[1] !== 'string') throw new ApiError(usage);
+  if (!api.spec || api.contractRepo) throw new ApiError('This repo has no spec of its own (project.api.spec): apply the draft in the contract\'s repository.');
+  const draft = path.resolve(cwd, o._[1]);
+  if (!fs.existsSync(draft)) throw new ApiError(`${draft} does not exist.`);
+  const bootstrap = /(^|\/)bootstrap\/contract\.(ya?ml|json)$/.test(draft);
+  const ticket = typeof o.ticket === 'string' ? o.ticket.replace(/^#/, '') : /(^|\/)(\d+)-[^/]*\.(ya?ml|json)$/.exec(draft)?.[2];
+  if (!bootstrap && !/^\d+$/.test(ticket ?? '')) throw new ApiError(`${usage}: a draft named <ticket>-<slug>.yaml, or --ticket <n>`);
+  const branch = bootstrap ? 'chore/bootstrap-contract' : `chore/${ticket}-contract`;
+  const lines = [];
+  const code = check({ spec: draft }, env, cwd, (l) => lines.push(l));
+  out(lines.join('\n'));
+  if (code !== 0) throw new ApiError('the draft does not pass forge api check: the contract-analyst fixes it first.');
+  if (/^breaking changes against .*: YES$/m.test(lines.join('\n')) && o['breaking-approved'] !== true) throw new ApiError(`the draft has breaking changes: the owner decides how consumers move (ask them; once they agree, ${usage.replace(' [--ticket <n>]', '')} with --breaking-approved).`);
+  const version = /^ok: .* version (\d+\.\d+\.\d+)$/m.exec(lines.join('\n'))?.[1];
+  const base = config.branches.base;
+  if (!git(root, ['fetch', '-q', 'origin', base], 60000).ok) throw new ApiError(`git fetch origin ${base} failed.`);
+  if (git(root, ['ls-remote', '--exit-code', '--heads', 'origin', branch]).ok) throw new ApiError(`${branch} is on origin already: merge it with forge merge ${branch}, or remove it first.`);
+  const wt = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'forge-api-apply-')));
+  fs.rmSync(wt, { recursive: true, force: true });
+  const step = (args, what) => { const r = git(wt, args, 120000); if (!r.ok) throw new ApiError(`${what} failed: ${r.err || r.out}`); return r; };
+  const added = git(root, ['worktree', 'add', '-q', '-b', branch, wt, `origin/${base}`]);
+  if (!added.ok) throw new ApiError(`cannot open ${branch}: ${added.err}`);
+  try {
+    fs.mkdirSync(path.dirname(path.join(wt, api.spec)), { recursive: true });
+    fs.copyFileSync(draft, path.join(wt, api.spec));
+    step(['add', api.spec], 'git add');
+    const title = `docs(api): contract ${version}${ticket ? ` for #${ticket}` : ''}`;
+    step(['commit', '-q', '-m', title], 'git commit');
+    step(['push', '-q', '-u', 'origin', branch], 'git push');
+    const body = `The API contract at version ${version}, from ${path.relative(root, draft)}${bootstrap ? ' (the bootstrap\'s, approved in the owner\'s review)' : ` (ticket #${ticket})`}. forge api check passed${o['breaking-approved'] === true ? '; its breaking changes were approved by the owner' : ''}. forge merge ${branch} merges it and tags api-v${version}.`;
+    const r = project.host === 'github'
+      ? run('gh', ['pr', 'create', '--base', base, '--head', branch, '--title', title, '--body', body], { cwd: wt, env })
+      : run('glab', ['mr', 'create', '--source-branch', branch, '--target-branch', base, '--title', title, '--description', body, '--yes'], { cwd: wt, env });
+    if (r.status !== 0) throw new ApiError(`the merge request was not opened: ${output(r)}`);
+    out(`${branch}: contract ${version} pushed, merge request opened${output(r) ? `\n${tail(output(r), 3)}` : ''}\nNext: forge merge ${branch} (it merges, then tags api-v${version}).`);
+    return 0;
+  } finally {
+    git(root, ['worktree', 'remove', '--force', wt]);
+  }
 }
 
 // The approved spec at project.api.pin, bundled to JSON in .forge/state/api/, from this repo or the contract repo.

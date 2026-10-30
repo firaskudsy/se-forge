@@ -18,15 +18,13 @@ const cut = (s, n) => (s.length > n ? `${s.slice(0, n - 1).replace(/\s+\S*$/, ''
 const semver = (v) => v.split('.').map(Number);
 const newer = (a, b) => { const x = semver(a); const y = semver(b); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i]; return false; };
 
-// What the client repo's git says: branch names (local and origin's, and origin's apart), tags, and merge commits by the branch merged
+// What the client repo's git says: branch names (local and origin's), tags, and merge commits by the branch merged
 // (GitLab's "Merge branch 'x' into 'dev'", git's own "Merge branch 'x' into dev", GitHub's "Merge pull request #3 from
 // owner/x"). A squash merge leaves no merge commit, so it is not seen.
 export function repoFacts(dir) {
-  if (!dir) return { refs: new Set(), pushed: null, tags: [], merges: [], contains: () => false };
+  if (!dir) return { refs: new Set(), tags: [], merges: [], contains: () => false };
   const names = (git(dir, ['for-each-ref', '--format=%(refname:short)', 'refs/heads', 'refs/remotes/origin']).out || '').split('\n').filter(Boolean);
   const refs = new Set(names.map((r) => r.replace(/^origin\//, '')));
-  // What origin has: null for a repository without one.
-  const pushed = git(dir, ['remote', 'get-url', 'origin']).ok ? new Set(names.filter((r) => r.startsWith('origin/')).map((r) => r.slice(7))) : null;
   const tags = (git(dir, ['tag', '-l']).out || '').split('\n').filter(Boolean);
   const merges = [];
   for (const row of (git(dir, ['log', '--all', '--merges', '--format=%H%x09%s']).out || '').split('\n')) {
@@ -39,7 +37,7 @@ export function repoFacts(dir) {
     const ref = git(dir, ['rev-parse', '--verify', '-q', `origin/${branch}`]).ok ? `origin/${branch}` : branch;
     return git(dir, ['merge-base', '--is-ancestor', hash, ref]).ok;
   };
-  return { refs, pushed, tags, merges, contains };
+  return { refs, tags, merges, contains };
 }
 
 // A sub-step: done, or open; the owner's (mine) are waiting for you while due (there is something to act on).
@@ -72,7 +70,7 @@ function inFlight({ lines, data, board, all }) {
     const at = t.stage === 0 && rec?.planned ? 1 : t.stage;
     const over = all.find((x) => x.num === t.num)?.limit?.over ?? [];
     const why = over.length ? `#${t.num} is at its limit (${over.join(', ')}): forge limits lift ${t.num}`
-      : /\bblocked\b|\bwaiting for the owner\b/i.test(rec?.status || '') ? `#${t.num}: ${cut(rec.status, 140)}` : '';
+      : /\bblocked\b|\bwaiting for the owner\b|\bon hold\b/i.test(rec?.status || '') ? `#${t.num}: ${cut(rec.status, 140)}` : '';
     return {
       num: t.num, title: rec?.title || '',
       subs: PIPE.map((label, i) => sub(label, i < at, i === at && why ? { mine: true, due: true, why } : {})),
@@ -155,18 +153,15 @@ export function projectSteps({ folder, main, base = 'dev', promote = ['staging',
       sub('Written', has(path.join(boot, 'review.md'))),
       sub('Your approval', after, { mine: true, due: has(path.join(boot, 'review.md')), why: 'approve bootstrap/review.md when the lead asks' }),
     ]);
-    // 9. After approval: the owner merges the architecture, contract and starter merge requests and tags the contract,
-    // and the lead creates the tickets (on the board, or listed in tickets-created.md).
+    // 9. After approval: the lead merges the architecture, contract and starter merge requests with forge merge, which
+    // tags the contract (decision 148), and creates the tickets (on the board, or listed in tickets-created.md).
     const contract = spec !== '' || seen('chore/bootstrap-contract');
     const wanted = ['chore/architecture', ...(contract ? ['chore/bootstrap-contract'] : []), ...(has(path.join(boot, 'project.starter.json')) || seen('chore/starter') ? ['chore/starter'] : [])];
-    // A merge request is the owner's once its branch is on origin; before, the lead is still on it.
-    const open = wanted.filter((b) => (repo.pushed ? repo.pushed.has(b) : seen(b)) && !merged(b));
-    const building = wanted.filter((b) => repo.pushed && !repo.pushed.has(b) && repo.refs.has(b) && !merged(b));
     const tag = repo.tags.find((t) => t.startsWith('api-v'));
     const created = data.catalogue.length || (board ?? []).length;
     step('setup', 'Setup', [wanted.length ? `${wanted.filter(merged).length} of ${wanted.length} merged` : '', tag ?? '', created ? `${created} tickets` : ''].filter(Boolean).join(', '), [
-      sub(`Your merges ${wanted.filter(merged).length} of ${wanted.length}`, wanted.every(merged), { mine: true, due: open.length > 0, why: `merge ${open.join(', ')} into ${base} (a draft: mark it ready first)${building.length ? `; ${building.join(', ')} is not pushed yet: the lead is still on it` : ''}` }),
-      sub(tag ? `Contract tag ${tag}` : 'Contract tag', Boolean(tag), { mine: true, skip: !contract, due: merged('chore/bootstrap-contract'), why: `tag api-v${version || '1.0.0'} on ${base} and push it` }),
+      sub(`Merges ${wanted.filter(merged).length} of ${wanted.length}`, wanted.every(merged)),
+      sub(tag ? `Contract tag ${tag}` : 'Contract tag', Boolean(tag), { skip: !contract }),
       sub(created ? `Tickets created ${created}` : 'Tickets created', created > 0),
     ]);
   }

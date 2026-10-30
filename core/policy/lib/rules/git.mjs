@@ -137,12 +137,13 @@ function branch(g, ctx) {
   return [];
 }
 
-// An api-v<semver> tag marks an approved contract version: a person sets it after the contract's MR is merged.
+// An api-v<semver> tag marks an approved contract version: forge merge sets it when it merges the contract's branch
+// (decision 148), or a person does.
 function tag(g) {
   const f = parseFlags(g.args, { shortValue: 'mFu', longValue: ['--message', '--file', '--local-user', '--sort', '--contains', '--no-contains', '--points-at', '--merged', '--no-merged', '--format', '--cleanup', '--color'] });
   if (has(f, 'ln', ['--list', '--verify']) || !f.positional.length) return [];
   if (!/^api-v/.test(f.positional[0])) return [];
-  return [ask('gate:contract', `Tag ${f.positional[0]} marks an approved API contract version. A person creates, moves or deletes it, after the contract's merge request is merged.`)];
+  return [ask('gate:contract', `Tag ${f.positional[0]} marks an approved API contract version. forge merge <the contract's branch> sets it when it merges (decision 148); otherwise a person creates, moves or deletes it.`)];
 }
 
 function config(g) {

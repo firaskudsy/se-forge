@@ -8,6 +8,30 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ## [Unreleased]
 
+### Added
+- **The lead merges the bootstrap's and the contract's merge requests** (decision 148). `forge merge <branch>` takes
+  `chore/architecture` (documents only), `chore/bootstrap-contract` and `chore/starter` (green gates) once the owner's
+  approval of the bootstrap review is recorded (`Approved: <date>, by the owner` atop `review.md`), and a ticket's
+  `chore/<n>-contract`; a draft merge request is marked ready first. A contract branch changes only the contract and
+  must pass `forge api check` at its head, a breaking change only with `--breaking-approved` after the owner's yes;
+  once merged, `forge merge` tags the merge commit `api-v<version>` and pushes the tag. The new `forge api apply
+  <draft>` puts a checked contract draft on its branch from `dev` and opens its merge request. Staging and main stay
+  a person's. The stepper's Setup no longer waits for the owner.
+- **On hold** (decision 147): in the build, a ticket that needs the owner (a question, an approval, a fix only they can
+  make) never holds up the others. The lead asks in writing and runs the new `forge wait-owner <ticket>`, which
+  returns as soon as the owner writes or after `policy.hold.minutes` (10; 0 holds at once). With no answer, the
+  ticket goes on hold (its plan's status line, and On hold on the board) and the lead takes the next ticket that
+  does not depend on it; once the owner answers, it comes back before any new pick. No question goes ahead on a
+  default the owner has not given.
+- **The On hold tab** on the dashboard: every ticket that waits (for an answer, at its limit, for another ticket), with
+  its questions as its plan wrote them, the reply to paste in the lead's session with the recommended answers filled
+  in (`#12 Q1 b, Q2 a`), and the tickets waiting behind it. `forge dashboard --text` prints it as its `On hold:` line,
+  and the progress report lists it.
+
+### Changed
+- An ADR asks the owner once per branch, as the contract and security gates do, not once per file: the bootstrap's
+  setup copies every accepted ADR at once.
+
 ## [0.2.46] - 2026-10-29
 
 ### Added

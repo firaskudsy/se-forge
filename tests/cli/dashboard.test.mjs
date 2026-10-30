@@ -372,7 +372,7 @@ test('forge timeline import: the history from Claude Code\'s logs, before the ho
   assert.equal(fs.readFileSync(path.join(w.state, 'timeline-import.jsonl'), 'utf8').trim().split('\n').length, lines.length, 'running it again replaces, never adds');
 });
 
-test('forge dashboard: one page with sixteen charts, the architecture, the screens, the app and the table in nine tabs, a CSV next to it', () => {
+test('forge dashboard: one page with sixteen charts, the architecture, the screens, the app, what is on hold and the table in ten tabs, a CSV next to it', () => {
   const w = world();
   write(path.join(w.state, 'timeline-2026-10.jsonl'), `${LINES.map((e) => JSON.stringify(e)).join('\n')}\n`);
   record({ buf: Buffer.from('a picture'), info: { type: 'png', width: 1280, height: 720 }, at: T0 + 30 * M, what: 'S1 the <data> model page', ticket: 10, branch: 'feat/10-data-model', commit: 'c0ffee12345678' }, w.folder);
@@ -388,8 +388,8 @@ test('forge dashboard: one page with sixteen charts, the architecture, the scree
   assert.equal((html.match(/<span class="num">/g) || []).length, 16);
   // Time per step first in the Time tab (decision 146), each step from its first file: this project has no bootstrap.
   assert.ok(html.indexOf('Time per step') > html.indexOf('id="tab-time"') && html.indexOf('Time per step') < html.indexOf(esc('Where each ticket\'s time goes')));
-  assert.deepEqual([...html.matchAll(/<button type="button" role="tab" [^>]*aria-selected="(\w+)" data-tab="(\w+)">/g)].map((x) => `${x[2]}:${x[1]}`), ['overview:true', 'architecture:false', 'time:false', 'cost:false', 'quality:false', 'skills:false', 'screens:false', 'app:false', 'tickets:false']);
-  assert.deepEqual([...html.matchAll(/<section class="panel" id="tab-(\w+)"/g)].map((x) => x[1]), ['overview', 'architecture', 'time', 'cost', 'quality', 'skills', 'screens', 'app', 'tickets']);
+  assert.deepEqual([...html.matchAll(/<button type="button" role="tab" [^>]*aria-selected="(\w+)" data-tab="(\w+)">/g)].map((x) => `${x[2]}:${x[1]}`), ['overview:true', 'architecture:false', 'time:false', 'cost:false', 'quality:false', 'skills:false', 'screens:false', 'app:false', 'hold:false', 'tickets:false']);
+  assert.deepEqual([...html.matchAll(/<section class="panel" id="tab-(\w+)"/g)].map((x) => x[1]), ['overview', 'architecture', 'time', 'cost', 'quality', 'skills', 'screens', 'app', 'hold', 'tickets']);
   // The stepper between the totals and the tabs (decision 143); its current step pulses, unless the viewer asks for less motion.
   assert.ok(html.indexOf('<section class="stepper"') > html.indexOf('<div class="kpis">') && html.indexOf('<section class="stepper"') < html.indexOf('<nav class="tabs"'));
   // The finish card after the tickets and stories (decision 145).
@@ -497,7 +497,7 @@ test('forge dashboard --text: the page\'s numbers as text, what to look at, and 
   const text = r.stdout;
   assert.match(text, /^acme: progress on \d\d \w{3}, \d+:\d\d [AP]M\nStep: /);
   // Where the project is (decision 143): no bootstrap stage left open, so the build; #12 waits for a person.
-  assert.match(text, /\nStep: 10 of 11, Build \(2 of 3 merged, 1 in flight\); in flight: #12 Build\.\nWaiting for you: Build: #12 is at its limit \(2 review rounds with blockers \(limit 2\)\): forge limits lift 12\.\n\n/);
+  assert.match(text, /\nStep: 10 of 11, Build \(2 of 3 merged, 1 in flight\); in flight: #12 Build\.\nWaiting for you: Build: #12 is at its limit \(2 review rounds with blockers \(limit 2\)\): forge limits lift 12\.\nOn hold: #12 is parked at its limit\.\n\n/);
   assert.match(text, /\nTickets merged: 2 of 3 · stories done: 2 of 3\n/, 'the same totals as the page');
   assert.match(text, /\nWorking time: \d+[hm][^·]* · waiting for you: 28m\n/);
   assert.match(text, /\nTokens: [\d.]+k = [\d.]+[kM]? re-read \(\d+%\) \+ [\d.]+[kM]? new \+ [\d.]+[kM]? output · API cost: no prices set · Opus share of tokens: \d+% · agents: \d+\n/);

@@ -43,15 +43,12 @@ Write `.forge/project/bootstrap/review.md`:
 - the tickets in order, with estimates and the total;
 - every contradiction between these artefacts and the register.
 
-Ask the owner once, with AskUserQuestion (skill `ask-owner`): the panel's open decisions as questions with their options, your recommendation first, then `A. Approve everything · B. Change something (say what)`. A change reruns only the affected stage, then this review again.
+Ask the owner once, with AskUserQuestion (skill `ask-owner`): the panel's open decisions as questions with their options, your recommendation first, then `A. Approve everything · B. Change something (say what)`. A change reruns only the affected stage, then this review again. On A, write `Approved: <date>, by the owner` as the first line of `review.md`: `forge merge` reads it before merging the setup's branches (decision 148).
 
 ## 9. After approval
-1. **Architecture.** On branch `chore/architecture`, copy the overview and diagrams to `docs/architecture/` and the accepted ADRs (status `accepted`, today's date) to `docs/adr/`; committing ADRs asks the owner. Commit, push, open its merge request; the owner merges it.
-2. **Contract.**
-   1. On branch `chore/bootstrap-contract`, copy `contract.yaml` to the repo's spec path (`project.api.spec`). Editing the spec asks the owner.
-   2. Commit, push, and open its merge request. The owner merges it: a checkpoint.
-   3. On `dev`, tag `api-v1.0.0` and push the tag. Both ask the owner.
-3. **Starter** (a repository without code yet; decisions 78-81). On branch `chore/starter`, `forge new` with the approved stack (`--backend … --db …`, `--frontend react`, `--mobile flutter --app-id <the store id the register records>`, as the register says; it asks the owner). Check `docker compose up -d --build --wait` and the gate, commit, push, open its merge request; the owner merges it. Merge `.forge/project/bootstrap/project.starter.json` into `project.json` after `forge config check` (asks the owner). An existing repository is onboarded instead (skill `onboard-repo`).
+1. **Architecture.** On branch `chore/architecture`, copy the overview and diagrams to `docs/architecture/` and the accepted ADRs (status `accepted`, today's date) to `docs/adr/`; the first ADR asks the owner once for the branch. Commit, push, open its merge request, and merge it yourself: `forge merge chore/architecture` (decision 148; it takes documents only).
+2. **Contract.** `forge api apply .forge/project/bootstrap/contract.yaml` puts it on `chore/bootstrap-contract` at the repo's spec path (`project.api.spec`) and opens its merge request; `forge merge chore/bootstrap-contract` merges it and tags `api-v1.0.0` on `dev` (decision 148).
+3. **Starter** (a repository without code yet; decisions 78-81). On branch `chore/starter`, `forge new` with the approved stack (`--backend … --db …`, `--frontend react`, `--mobile flutter --app-id <the store id the register records>`, as the register says; it asks the owner). Check `docker compose up -d --build --wait` and the gate (`forge gates`), commit, push, open its merge request, and merge it yourself: `forge merge chore/starter` (decision 148). Merge `.forge/project/bootstrap/project.starter.json` into `project.json` after `forge config check` (asks the owner). An existing repository is onboarded instead (skill `onboard-repo`).
 4. **Tickets.** Create them yourself from `tickets.md`, in order: `forge tracker create … --ready --source ai --area <area> --relates <epic>`. The review approved them, so they are ready. Agents other than you and the project manager cannot set that label.
 5. `forge save`.
 6. **Build:** `/pipeline next 1`, one ticket after the other, with the project manager.

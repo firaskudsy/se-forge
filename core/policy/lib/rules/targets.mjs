@@ -40,9 +40,10 @@ export function writeFindings(file, ctx, how = 'Changing') {
   if (isConfig) out.push(ask('repo:config', `${how} the project policy config changes the safety rules.`));
   if (matchAny(cfg.paths.ci, rel)) out.push(ask('repo:ci', `${how} ${rel} changes what the pipeline checks and deploys.`));
   if (matchAny(cfg.paths.contract, rel) && !isApproved(ctx, 'contract')) {
-    out.push(ask('gate:contract', `${rel} is the API contract. It changes only in its own merge request that a person approves; approving allows contract edits on branch ${ctx.branch() ?? '(detached HEAD)'}.`, { gate: 'contract', record: true }));
+    out.push(ask('gate:contract', `${rel} is the API contract. The lead puts a checked draft on its own branch with forge api apply <draft> (decision 148); approving allows contract edits on branch ${ctx.branch() ?? '(detached HEAD)'}.`, { gate: 'contract', record: true }));
   }
-  if (matchAny(cfg.paths.adr, rel)) out.push(ask('gate:architecture', `${rel} records an architecture or stack decision, which a human approves.`, { gate: 'architecture' }));
+  // Once per branch (decision 148): the bootstrap's setup copies every accepted ADR at once.
+  if (matchAny(cfg.paths.adr, rel) && !isApproved(ctx, 'architecture')) out.push(ask('gate:architecture', `${rel} records an architecture or stack decision, which a human approves; approving allows ADR edits on branch ${ctx.branch() ?? '(detached HEAD)'}.`, { gate: 'architecture', record: true }));
   if (rel.startsWith('.claude/')) out.push(ask('repo:agent-config', `${how} agent configuration (${rel}).`));
   if (rel.startsWith('.forge/project/kit/')) out.push(ask('repo:agent-config', `${how} the project's kit overrides (${rel}) changes the agents, skills or rules for everyone on the project.`));
   if (/(^|\/)\.gitleaks(ignore|\.toml)$/.test(rel)) out.push(ask('secrets:allowlist', `${how} ${rel} changes which secrets the scanner lets through.`));

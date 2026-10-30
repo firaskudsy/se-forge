@@ -39,7 +39,7 @@ flowchart TD
     D6a --> D7{"Stage 8 · One review, the panel's result first: you approve, or say what to change"}
     D7 -- "change: that stage runs again" --> D2
     D7 -- "approve" --> D8["Stage 9 · Merge requests: architecture, contract, starter code"]
-    D8 --> D9["You merge them in GitLab and approve the tag api-v1.0.0"]
+    D8 --> D9["The lead merges them and tags api-v1.0.0 (forge merge)"]
     D9 --> D10["The tickets are created in GitLab, labelled ai::ready"]
   end
   subgraph sys["F. An existing system of several repositories"]
@@ -53,7 +53,7 @@ flowchart TD
     Q -- "yes" --> Q1["You answer them, in one message"]
     Q -- "no" --> K{"Does the API change?"}
     Q1 --> K
-    K -- "yes" --> K1["You merge the contract change and tag it"]
+    K -- "yes" --> K1["The lead merges the contract change and tags it; a breaking one waits for your yes"]
     K -- "no" --> G{"Security or architecture?"}
     K1 --> G
     G -- "yes" --> G1["You approve the plan before the engineers start"]
@@ -91,7 +91,7 @@ flowchart TD
   class A,B,C1,C2,C3,C4,D1a,D7,D9,Q1,K1,G1,FU,F1,F2,S1,S2,S3,S4,L2,E6P you
 ```
 
-Everything the kit needs from you comes as choices, in every phase: pick one (A, B, C, the recommended one first), tick any (`[ ]`), yes or no, or your own words when nothing fits. In the session you click or type a number; in a report you reply like `1A 2B 3[31]` (decision 136). What only you can do (a command to run, a merge request to merge, a tag) comes last in the lead's message as **Your turn**: numbered steps in the order to do them, each saying where (in the session with `!`, a terminal in a folder, the browser and which buttons), the exact command to paste and how you know it worked; you do them and reply `done` (decision 144). Questions about security or architecture always wait for you. When you can't be reached, other questions go ahead on the planner's recommended answer, and the plan records it. A ticket never loops for ever: at its limit it is parked until you decide. For an existing system, reading it into documents (`/onboard`) and change requests (`/change`) come next; until then you put its tickets on the board (part F).
+Everything the kit needs from you comes as choices, in every phase: pick one (A, B, C, the recommended one first), tick any (`[ ]`), yes or no, or your own words when nothing fits. In the session you click or type a number; in a report you reply like `1A 2B 3[31]` (decision 136). What only you can do (a command to run, a merge request to merge, a tag) comes last in the lead's message as **Your turn**: numbered steps in the order to do them, each saying where (in the session with `!`, a terminal in a folder, the browser and which buttons), the exact command to paste and how you know it worked; you do them and reply `done` (decision 144). Questions about security or architecture always wait for you. In the build, a ticket that needs you never holds up the others: the lead asks, waits 10 minutes (`policy.hold.minutes`), then puts the ticket **on hold** and takes the next one that does not depend on it; the dashboard's On hold tab lists it with its questions and the reply to paste, and the lead takes it back up once you answer (decision 147). A ticket never loops for ever: at its limit it is parked until you decide. For an existing system, reading it into documents (`/onboard`) and change requests (`/change`) come next; until then you put its tickets on the board (part F).
 
 ---
 
@@ -349,8 +349,8 @@ In Claude Code, type:
 3. **The panel reads it all.** Agents for the backend, the frontend, the database, security, QA, the architect and the project manager (and mobile, devops or performance when the app needs them) each read the drafts through their own job, so that what the build would find later is found now. The lead fixes what fits your answers and keeps the rest for you. Their reports are in `.forge/project/bootstrap/panel/`.
 4. **Review once.** Open `.forge/project/bootstrap/review.md`: it starts with the panel's result (what it changed, what it rejected and why, and the decisions it leaves to you). Then answer "approve", or say what to change.
 5. **Then it does the rest, asking you at each step:**
-   - It opens merge requests in GitLab for the architecture, the API contract and the starter code. **You merge them in GitLab.**
-   - It tags the contract `api-v1.0.0`; you approve.
+   - It opens merge requests for the architecture, the API contract and the starter code, and merges them itself with `forge merge` once each passes its checks (your approval of the review is the checkpoint, decision 148).
+   - `forge merge` tags the contract `api-v1.0.0` as it merges it.
    - It creates the tickets in the app's GitLab project, labelled `ai::ready`.
 
 ### 6. Build it
@@ -454,7 +454,7 @@ stretches when nothing happened, such as a laptop asleep; **Tokens**, split into
 output, so a large total is not mistaken for a large bill; and **Finish (AI time)**: the AI work left until every step is
 done, the release too, in days around the clock, and under it when that lands on the calendar at the project's own pace,
 docs/metrics.md); under them, **where the project is** (below); and the
-charts, the app's screenshots and the tickets are in nine tabs:
+charts, the app's screenshots and the tickets are in ten tabs:
 
 | Tab | Chart | Look for |
 |---|---|---|
@@ -477,6 +477,7 @@ charts, the app's screenshots and the tickets are in nine tabs:
 | | 16. Skills | the skills used, by whom and on which tickets, and the ones never used |
 | Screens | | what the app looked like, and when: the screenshots by day, with their ticket and what they show; click one to see it larger |
 | Run the app | | whether the app runs now (the page checks every few seconds), the commands to build, start and stop it with a Copy button each, and its addresses on your Mac |
+| On hold | | every ticket that waits for you (decision 147): its questions as the plan wrote them and the reply to paste in the lead's session, with your recommended answers filled in; what waits behind it |
 | Tickets | | every ticket, the ones nobody has picked yet too, with its status on the board; sortable by any column, its tokens and cost right after its status; click a ticket's number to open its issue in GitLab, and ▸ to see its agents one by one: the job each was given, its model, its skills, tokens, cost and time, with the lead's own share last. In a system, a Repo column and a filter by repository |
 
 Hover any bar or segment for its numbers.

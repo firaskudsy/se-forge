@@ -88,7 +88,7 @@ claude
 | The queue, agents in lanes | `/pipeline next` |
 | Merge a finished ticket into dev | `forge merge <ticket>` (the lead; it checks gates, reviews and the contract). In a system: in the ticket's repository; exit 3 `READY FOR A PERSON` when that branch deploys |
 | In a system: an agent's worktree | `forge lane open <ticket>` (`--review` for reviewers and QA), `forge lane close <path>` (the lead) |
-| Ask about the API contract | `forge api check`, `forge api generate` (after a person tags `api-vX.Y.Z`) |
+| Ask about the API contract | `forge api check`, `forge api generate` (once `forge merge` has tagged `api-vX.Y.Z`); the lead puts a contract change on its branch with `forge api apply <draft>` and merges it with `forge merge chore/<n>-contract` |
 | The tracker | `forge tracker list ready`, `forge tracker get <id>` |
 | A ticket's AI cost | `forge metrics <id> --record` |
 | Where a ticket's time and tokens went | `forge timeline <id>` (`--days 7`, `--csv`, `--json`; cost with `project.prices`) |
@@ -98,6 +98,7 @@ claude
 | Stop for the day, close the laptop, or go offline | `/pause` until it says "Safe to close"; `/resume` in a fresh session later |
 | See what the agents left behind | `forge worktrees` (`--clean` removes the finished ones) |
 | Answer the kit | Every question comes as choices: pick in the session, or reply like `1A 2B 3[31]` to a written list; your own words always work too. What only you can do comes last as **Your turn**: steps in order, each with where, the command to paste and how you know it worked; do them, then reply `done`. What you answered before, the owner-assistant answers for you; the progress report lists it under "Decided for you" to change |
+| Answer a ticket on hold | In the build a ticket waits 10 minutes for your answer (`policy.hold.minutes`), then goes on hold and the lead takes another. The dashboard's **On hold** tab has its questions and the reply to paste in the lead's session: `#12 Q1 b, Q2 a` |
 | A ticket parked at its limit | `forge limits` shows each open ticket's lanes, review rounds with blockers and QA fails (4, 2, 2 by default); `forge limits lift 12` gives it one more allowance (a person only) |
 
 ## Branches

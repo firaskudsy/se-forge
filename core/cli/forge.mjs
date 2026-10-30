@@ -9,10 +9,12 @@
 //   forge doctor                          health check (exit 1 on any failure)
 //   forge save [-m <message>]             commit and push this project's folder in the team repo
 //   forge gates                           the "done" check on the current branch
-//   forge merge <ticket> [--branch <b>]    the lead merges a ticket into dev: gates, tests, reviews and contract checked
+//   forge merge <ticket> [--branch <b>]    the lead merges a ticket into dev: gates, tests, reviews and contract checked;
+//   forge merge <setup branch>            or the bootstrap's and a contract's branch, tagging api-v<version> (decision 148)
 //   forge tracker <command> [args]        the project's tracker (see the tracker skill)
 //   forge handover <name> [--from-tree] [worktree]
-//   forge api check|fetch|generate        the API contract: lint + breaking changes + version rule; pinned spec; client
+//   forge api check|fetch|generate|apply  the API contract: lint + breaking changes + version rule; pinned spec; client;
+//                                         apply: a contract draft onto its own branch and merge request (decision 148)
 //   forge config check <file>             validate a project.json (or a proposal) before it is applied
 //   forge design sample <image> [--at "x,y x,y"] [--region x,y,w,h] [--top N]   exact colours of a provided screen
 //   forge docs check <file|folder> ...   decision records are MADR, Mermaid diagrams render (Docker)
@@ -32,6 +34,8 @@
 //                                         open it; up builds, starts, waits until healthy and opens it; down stops it
 //   forge limits [lift <ticket>]          each open ticket's use of its limits (decision 127); lift: a person gives a
 //                                         parked ticket one more allowance
+//   forge wait-owner <ticket>             in the build, the wait for the owner's answer on a ticket (decision 147): up to
+//                                         policy.hold.minutes, then the ticket goes on hold and the lead takes another
 //   forge system check [<system.json>]   a system's description (decision 130): its repositories, branches, deploys,
 //                                         services and environment variable names
 //   forge system init --system <slug> [--from <system.json>] [--workspace <dir>]   clone every member repository
@@ -58,7 +62,7 @@ import { KIT_ROOT, kitVersion } from '../policy/lib/kit.mjs';
 import { gatesCommand } from '../policy/lib/handlers.mjs';
 import { pacingState } from '../policy/lib/pacing.mjs';
 import { serverPrefix } from '../policy/lib/mcp.mjs';
-import { check as apiCheck, fetchSpec, generate as apiGenerate, ApiError } from './api.mjs';
+import { check as apiCheck, fetchSpec, generate as apiGenerate, apply as apiApply, ApiError } from './api.mjs';
 import { sample as designSample, DesignError } from './design.mjs';
 import { merge, MergeError } from './merge.mjs';
 import { checkDocs, DocsError } from './docs.mjs';
@@ -76,6 +80,7 @@ import { app, appInfo, AppError } from './app.mjs';
 import { checkSystem, memberOf, memberSettings, systemOf } from '../policy/lib/system.mjs';
 import { lane, LaneError } from './lane.mjs';
 import { limits, LimitsError } from './limits.mjs';
+import { waitOwner, WaitError } from './wait.mjs';
 import { llm, llmFor, llmDoctor, llmLabel, LlmError } from './llm.mjs';
 import { llmInUse } from '../policy/lib/llm.mjs';
 import { record, clip } from '../policy/lib/timeline.mjs';
@@ -723,7 +728,7 @@ async function run(argv, env, cwd, out, failed) {
       }
       case 'merge': {
         const { main: m } = checkout(cwd);
-        return merge({ ticket: o._[0], branch: typeof o.branch === 'string' ? o.branch : null }, env, m, out);
+        return merge({ ticket: o._[0], branch: typeof o.branch === 'string' ? o.branch : null, breakingApproved: o['breaking-approved'] === true }, env, m, out);
       }
       case 'tracker': {
         const { main: m } = checkout(cwd);
@@ -741,7 +746,8 @@ async function run(argv, env, cwd, out, failed) {
         if (sub === 'check') return apiCheck(o, env, cwd, out);
         if (sub === 'fetch') { out(fetchSpec(env, cwd)); return 0; }
         if (sub === 'generate') return apiGenerate(env, cwd, out);
-        throw new UsageError('forge api check [--spec <file>] [--base <tag>] | fetch | generate');
+        if (sub === 'apply') return apiApply(o, env, cwd, out);
+        throw new UsageError('forge api check [--spec <file>] [--base <tag>] | fetch | generate | apply <draft> [--ticket <n>] [--breaking-approved]');
       }
       case 'new': {
         const { main: m } = checkout(cwd);
@@ -861,6 +867,11 @@ async function run(argv, env, cwd, out, failed) {
         const { config } = loadConfig(m, env);
         return limits(o, { main: m, folder: projectFolder(m), config, out });
       }
+      case 'wait-owner': {
+        const { main: m } = checkout(cwd);
+        const { config } = loadConfig(m, env);
+        return await waitOwner(o, { main: m, config, out });
+      }
       case 'shot': {
         const { main: m } = checkout(cwd);
         return shot(o, { folder: projectFolder(m), cwd, out });
@@ -884,7 +895,7 @@ async function run(argv, env, cwd, out, failed) {
       }
     }
   } catch (e) {
-    if (e instanceof UsageError || e instanceof ApiError || e instanceof DesignError || e instanceof MergeError || e instanceof DocsError || e instanceof StarterError || e instanceof MetricsError || e instanceof ShotError || e instanceof AppError || e instanceof LimitsError || e instanceof LaneError || e instanceof LlmError) { process.stderr.write(`forge ${cmd}: ${e.message}\n`); failed(e.message); return 2; }
+    if (e instanceof UsageError || e instanceof ApiError || e instanceof DesignError || e instanceof MergeError || e instanceof DocsError || e instanceof StarterError || e instanceof MetricsError || e instanceof ShotError || e instanceof AppError || e instanceof LimitsError || e instanceof WaitError || e instanceof LaneError || e instanceof LlmError) { process.stderr.write(`forge ${cmd}: ${e.message}\n`); failed(e.message); return 2; }
     throw e;
   }
 }

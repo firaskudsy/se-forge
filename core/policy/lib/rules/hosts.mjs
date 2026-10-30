@@ -30,7 +30,7 @@ export function checkGh(argv) {
   const key = `${group} ${verb ?? ''}`.trim();
   const f = parseFlags(argv.slice(3), GH_SPECS[key] || { shortValue: 'R', longValue: ['--repo'] });
   if (group === 'api') return api(argv, 'gh');
-  if (key === 'pr merge') return [deny('gh:merge', 'The lead merges a finished ticket into dev with `forge merge <ticket>`, which checks gates, reviews and the contract first; staging and main are merged by a person.')];
+  if (key === 'pr merge') return [deny('gh:merge', 'The lead merges a finished ticket into dev with `forge merge <ticket>`, and the bootstrap\'s or a contract\'s branch with `forge merge <branch>` (decision 148), which check gates, reviews and the contract first; staging and main are merged by a person.')];
   if (key === 'pr review' && has(f, 'a', ['--approve'])) return [deny('gh:approve', 'Agents never approve pull requests.')];
   if (group === 'secret' || (group === 'variable' && verb !== 'list')) return [deny('gh:secrets', 'Repository secrets and variables are managed by humans.')];
   if (group === 'repo' && ['delete', 'archive', 'unarchive', 'rename', 'edit', 'transfer'].includes(verb)) return [deny('gh:repo-settings', 'Repository settings are managed by humans.')];
@@ -47,7 +47,7 @@ export function checkGlab(argv) {
   const f = parseFlags(argv.slice(3), { shortValue: 'tdlabsSmRF', longValue: ['--title', '--description', '--source-branch', '--target-branch', '--label', '--assignee', '--reviewer', '--milestone', '--repo'] });
   const key = `${group} ${verb ?? ''}`.trim();
   if (group === 'api') return api(argv, 'glab');
-  if (key === 'mr merge') return [deny('glab:merge', 'The lead merges a finished ticket into dev with `forge merge <ticket>`, which checks gates, reviews and the contract first; staging and main are merged by a person.')];
+  if (key === 'mr merge') return [deny('glab:merge', 'The lead merges a finished ticket into dev with `forge merge <ticket>`, and the bootstrap\'s or a contract\'s branch with `forge merge <branch>` (decision 148), which check gates, reviews and the contract first; staging and main are merged by a person.')];
   if (key === 'mr approve') return [deny('glab:approve', 'Agents never approve merge requests.')];
   if (group === 'variable' || (key === 'ci get' && argv.includes('--with-variables'))) return [deny('glab:secrets', 'CI/CD variables are managed by humans and may hold secrets.')];
   if (group === 'repo' && ['delete', 'archive', 'transfer', 'update'].includes(verb)) return [deny('glab:repo-settings', 'Project settings are managed by humans.')];

@@ -33,7 +33,7 @@ branches: 70-75), and the existing `docs/adr/` and `docs/architecture/`.
 4. One ADR per decision; one evaluation per new technology.
 5. `forge docs check .forge/project/architecture` until it passes.
 6. Questions the register does not answer, and every `Gates: architecture` choice, go to the owner as lettered options with the recommendation first (skill `ask-owner`), never as defaults.
-7. After the owner's approval (the bootstrap's single review, or the gate): the lead copies `overview.md` and the diagrams to `docs/architecture/` and the accepted ADRs to `docs/adr/` on a `chore/architecture` branch, with its merge request, which a person merges.
+7. After the owner's approval (the bootstrap's single review, or the gate): the lead copies `overview.md` and the diagrams to `docs/architecture/` and the accepted ADRs to `docs/adr/` on a `chore/architecture` branch, with its merge request, which it merges itself with `forge merge chore/architecture` (decision 148).
 
 ## Done when
 - the overview, the diagrams, the ADRs and the NFR checklist exist, cite the register, and pass `forge docs check`;

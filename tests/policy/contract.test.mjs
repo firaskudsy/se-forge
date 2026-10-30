@@ -46,6 +46,18 @@ test('editing the spec asks a person once per branch; unattended it is refused',
   assert.equal(pre(dir, 'Edit', edit).decision, 'ask', 'not for another branch');
 });
 
+test('an ADR asks a person once per branch too (decision 148): the bootstrap\'s setup copies them all at once', () => {
+  const dir = repo();
+  const adr = (n) => ({ file_path: path.join(dir, `docs/adr/000${n}-stack.md`), content: '# ADR\n' });
+  let r = pre(dir, 'Write', adr(1));
+  assert.equal(r.decision, 'ask');
+  assert.match(r.reason, /\[gate:architecture\] docs\/adr\/0001-stack\.md records an architecture or stack decision.*approving allows ADR edits on branch feat\/1-login/);
+  hook('post-tool-use', dir, { hook_event_name: 'PostToolUse', tool_name: 'Write', tool_input: adr(1), tool_response: {} });
+  assert.equal(pre(dir, 'Write', adr(2)).decision, 'allow', 'the next ADR on this branch');
+  sh(dir, 'git', 'switch', '-q', '-c', 'chore/architecture');
+  assert.equal(pre(dir, 'Write', adr(3)).decision, 'ask', 'not on another branch');
+});
+
 test('a repo that only consumes the contract does not guard a file at that path', () => {
   const dir = repo({ spec: 'api/openapi.yaml', contractRepo: 'git@example.com:acme/backend.git', pin: 'api-v1.0.0' });
   assert.equal(pre(dir, 'Write', { file_path: path.join(dir, 'api/openapi.yaml'), content: 'x' }).decision, 'allow');

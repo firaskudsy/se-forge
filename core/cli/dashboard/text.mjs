@@ -7,6 +7,7 @@ import { day, when } from './format.mjs';
 import { countsText } from './issues.mjs';
 import { stepsText } from './steps.mjs';
 import { finishText } from './finish.mjs';
+import { holdText } from './hold.mjs';
 import { duration } from '../timeline.mjs';
 import { fmt } from '../metrics.mjs';
 
@@ -46,7 +47,7 @@ export function flags(m) {
     }
     if (t.estimate && t.split && t.split.total > t.estimate.high * H) out.push(`${t.id}: ${duration(t.split.total)} so far, past its estimate (${range(t.estimate)}).`);
     // A plan blocked on an issue, or with questions asked and not answered yet (decision 139): a person is needed.
-    if (/\bblocked\b|\bwaiting for the owner\b/i.test(t.status || '')) out.push(`${t.id}: ${cut(t.status, 160)}`);
+    if (/\bblocked\b|\bwaiting for the owner\b|\bon hold\b/i.test(t.status || '')) out.push(`${t.id}: ${cut(t.status, 160)}`);
   }
   const merged = new Set(m.all.filter((t) => t.mergedAt).map((t) => t.num));
   for (const g of m.data.gatesFailed || []) {
@@ -70,6 +71,8 @@ export function renderText(m, { project }) {
   if (m.repoLinks?.length) out.push(`Repos: ${m.repoLinks.map((l) => `${l.label} ${l.url}`).join(' · ')}`);
   // Where the project is, and what waits for you (decision 143): the stepper above the page's tabs.
   out.push(...stepsText(m.steps));
+  // Every ticket that waits (decision 147): the page's On hold tab.
+  if (holdText(m.hold ?? [])) out.push(holdText(m.hold));
   out.push('');
 
   out.push(`Tickets merged: ${p.ticketsDone.length} of ${p.totalTickets} · stories done: ${p.totalStories ? `${p.storiesDone.length} of ${p.totalStories}` : 'no story list'}`);

@@ -1,5 +1,5 @@
 // forge dashboard (decisions 98 to 100, 122, 137, 143): one local HTML page with where the project is (steps.mjs), and
-// sixteen charts, the app's screenshots and a ticket table in nine tabs, from the project's own records (data.mjs) and
+// sixteen charts, the app's screenshots, what is on hold and a ticket table in ten tabs, from the project's own records (data.mjs) and
 // the measures (measures.mjs). No library, no network: the pictures are inside the page. Written next to a CSV.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -13,6 +13,7 @@ import { renderArchitecture } from './architecture-view.mjs';
 import { projectSteps, stepTimes } from './steps.mjs';
 import { renderSteps } from './steps-view.mjs';
 import { finish, finishText } from './finish.mjs';
+import { onHold, renderHold } from './hold.mjs';
 import { ticketUsage, ticketLimits, reached, teamPaths } from '../../policy/lib/limits.mjs';
 import { day, weekday, clock, when } from './format.mjs';
 import { duration } from '../timeline.mjs';
@@ -90,7 +91,7 @@ export function dashboardModel({ main, folder, teamRoot, base, stateDir, prices 
   const timeline = projectTimeline(lines, { merges, shots: marks });
   // When the app could be done (decision 145), at the pace of the whole project, whatever --days or --ticket say.
   const end = finish({ steps, all, drafts: data.drafts, catalogue: data.catalogue, forecast: prog.forecast, timeline: days || only ? projectTimeline(everyLine) : timeline, now });
-  return { data, all, tickets: picked, every, table, only, kit, issues: tracked, app, architecture, watch, link, repoLinks: repoLinks({ main, folder, repos, origin }), lines, money, prices, now, since, shots, progress: prog, steps, finish: end, stepTimes: stepTimes({ steps, folder, main, base, lines: everyLine, now }), roles: roles(lines, prices), friction: friction(lines), timeline, skills };
+  return { data, all, tickets: picked, every, table, only, kit, issues: tracked, app, architecture, watch, link, repoLinks: repoLinks({ main, folder, repos, origin }), lines, money, prices, now, since, shots, progress: prog, steps, finish: end, stepTimes: stepTimes({ steps, folder, main, base, lines: everyLine, now }), hold: onHold({ every, drafts: data.drafts, catalogue: data.catalogue }), roles: roles(lines, prices), friction: friction(lines), timeline, skills };
 }
 
 // The project's repositories on their host, for the links beside the page's title: the client repo (a system's
@@ -133,7 +134,7 @@ const repoNav = (links) => (links?.length ? `<nav class="repos" aria-label="Repo
 function legend(keys) {
   return `<div class="legend">${keys.map((k) => `<span><i class="${k.cls}"></i>${esc(k.label)}</span>`).join('')}</div>`;
 }
-const TABS = [['overview', 'Overview'], ['architecture', 'Architecture'], ['time', 'Time'], ['cost', 'Cost'], ['quality', 'Quality'], ['skills', 'Agents & skills'], ['screens', 'Screens'], ['app', 'Run the app'], ['tickets', 'Tickets']];
+const TABS = [['overview', 'Overview'], ['architecture', 'Architecture'], ['time', 'Time'], ['cost', 'Cost'], ['quality', 'Quality'], ['skills', 'Agents & skills'], ['screens', 'Screens'], ['app', 'Run the app'], ['hold', 'On hold'], ['tickets', 'Tickets']];
 const panel = (id, body) => `<section class="panel" id="tab-${id}" role="tabpanel" aria-labelledby="tab-btn-${id}">${body}</section>`;
 const card = (n, title, question, body) => `<section class="card"><h2><span class="num">${n}</span>${esc(title)}</h2><p class="q">${esc(question)}</p>${body}</section>`;
 
@@ -419,12 +420,13 @@ footer{color:var(--dim);font-size:12px}footer p{margin:4px 0}
 .diagram{margin:8px 0 14px}.diagram{background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px;overflow-x:auto}.diagram svg{display:block;margin:0 auto;height:auto}h4.part{margin-top:18px}
 .comp .node rect{fill:var(--card);stroke:var(--dim);stroke-width:1.2}.comp .node.outside rect{stroke-dasharray:4 3}.comp .edge{fill:none;stroke:var(--dim);stroke-width:1.5}.comp .arrowhead{fill:var(--dim)}
 .verb{display:inline-block;min-width:52px;text-align:center;border-radius:4px;padding:1px 6px;font:600 11px ui-monospace,Menlo,monospace;color:#fff;background:var(--dim)}.v-get{background:var(--i-open)}.v-post{background:var(--i-closed)}.v-put,.v-patch{background:var(--i-progress)}.v-delete{background:var(--rework)}
+.hold{border-top:1px solid var(--line);padding:12px 0 6px;scroll-margin-top:56px}.hold h3{font-size:15px;margin:0 0 2px}.hold h3 a{color:var(--agents)}.hold .dim{margin:2px 0}.hold-s{margin:6px 0;color:var(--waiting)}.hold-r{margin:10px 0 2px;font-weight:600}.hold .md{max-width:920px}
 .status{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:999px;padding:4px 12px;margin:0 0 10px;font-weight:600}.status i{width:9px;height:9px;border-radius:50%;background:var(--idle)}.status.up i{background:var(--i-closed)}.status.down i{background:var(--dim)}
 </style></head><body><main>
 <header class="top"><div><h1>${esc(project)}</h1><p class="sub">${m.since > 0 ? `Last ${Math.round((m.now - m.since) / (24 * H))} days` : 'Whole project'} · built ${esc(when(m.now))} · ${m.table.length} tickets${kitText(m.kit) ? ` · ${esc(kitText(m.kit))}` : ''}${m.watch ? ` · <span id="watch">watching: a new page every ${m.watch.every} min, and this one reloads itself</span>` : ''}</p></div>${repoNav(m.repoLinks)}</header>
 <div class="kpis">${kpis.map(([k, v, more, hint]) => `<div class="kpi"${hint && more ? ` title="${esc(hint)}"` : ''}><span>${esc(k)}</span><b>${esc(v)}</b>${more ? `<small>${esc(more)}</small>` : ''}</div>`).join('')}</div>
 ${renderSteps(m.steps)}
-<nav class="tabs" role="tablist" aria-label="Dashboard sections">${TABS.map(([id, l], i) => `<button type="button" role="tab" id="tab-btn-${id}" aria-controls="tab-${id}" aria-selected="${i === 0}" data-tab="${id}">${esc(l)}${id === 'screens' && m.shots.length ? `<span class="count">${m.shots.length}</span>` : ''}</button>`).join('')}</nav>
+<nav class="tabs" role="tablist" aria-label="Dashboard sections">${TABS.map(([id, l], i) => `<button type="button" role="tab" id="tab-btn-${id}" aria-controls="tab-${id}" aria-selected="${i === 0}" data-tab="${id}">${esc(l)}${id === 'screens' && m.shots.length ? `<span class="count">${m.shots.length}</span>` : ''}${id === 'hold' && m.hold.length ? `<span class="count">${m.hold.length}</span>` : ''}</button>`).join('')}</nav>
 ${panel('overview', `${card(1, 'The project over time', 'Where did the work wait for you? Each day across, in the hours anything happened: the top lane is the AI at work, the bottom lane each wait for you, by kind. Blank in both is nobody working; a triangle is a merge, a camera a screenshot (click it to see it).', legend([...AI, ...kinds, MARK, ...SHOT]) + cDays + kindsText)}
 ${card(2, 'Progress and forecast', 'When will the project be done, and what will it cost?', c6a + fcText + c6b)}
 ${card(3, 'Issues over time', 'Is the board shrinking? Every issue in the tracker by its status, from its creation to now: hover for the counts at any moment.', cIssues)}`)}
@@ -444,6 +446,7 @@ ${card(15, 'Roles and their skills', 'Which roles work from their skills, and wh
 ${card(16, 'Skills', 'Which skills were used, by whom and on which tickets; and the ones never used.', cSkills)}`)}
 ${panel('screens', `<section class="card"><h2>Screens</h2><p class="q">What the app looked like, and when: the pictures kept with forge shot, oldest first. Click one to see it larger.</p>${cShots}</section>`)}
 ${panel('app', `<section class="card"><h2>Run the app</h2><p class="q">See the app as it is now: build and start its containers on this Mac, then open it.</p>${cApp}</section>`)}
+${panel('hold', renderHold(m.hold, { link: m.link, cmd }))}
 ${panel('tickets', `<section class="card"><h2>Tickets</h2><p class="q">Every ticket, the ones nobody has picked yet too, with its status on the board${!m.issues ? ' (no tracker: the status comes from the records)' : !m.issues.readAt ? ' (the board has not been read yet: run forge dashboard without --offline; until then the status comes from the records)' : ''}. Click a column to sort, a ticket's number to open its issue, and ▸ to see its agents one by one (the job each was given, its model, its skills, tokens and time; the lead's own turns last). The same rows are in dashboard.csv next to this page.</p>${table}</section>`)}
 <footer>${notes.map((x) => `<p>${esc(x)}</p>`).join('')}</footer>
 </main>

@@ -69,6 +69,9 @@ export const DEFAULTS = Object.freeze({
   // Per ticket, the circuit breaker (decision 127): past one of these the next engineer lane is refused and the
   // ticket is parked until a person lifts it (forge limits lift <ticket>).
   limits: { lanes: 4, blockerRounds: 2, qaFails: 2 },
+  // In the build, how long a ticket waits for the owner's answer before it goes on hold and the lead takes another
+  // (decision 147, forge wait-owner); 0 holds it at once.
+  hold: { minutes: 10 },
   output: { heavy: [] },
   kit: {
     configPath: '.forge/project/project.json',
@@ -246,6 +249,7 @@ export function loadConfig(mainRoot, env = process.env) {
   const project = merge(structuredClone(PROJECT_DEFAULTS), raw?.project ?? {}, 'project', errors);
   if (config.budget.warn >= config.budget.block) errors.push('policy.budget.warn must be below policy.budget.block');
   for (const k of ['lanes', 'blockerRounds', 'qaFails']) if (!Number.isInteger(config.limits?.[k]) || config.limits[k] < 1) errors.push(`policy.limits.${k} must be a whole number, 1 or more`);
+  if (!Number.isInteger(config.hold?.minutes) || config.hold.minutes < 0 || config.hold.minutes > 120) errors.push('policy.hold.minutes must be a whole number from 0 to 120');
   if (!['auto', 'gitleaks', 'builtin'].includes(config.secrets.scanner)) errors.push('policy.secrets.scanner must be auto, gitleaks or builtin');
   if (!['github', 'gitlab'].includes(project.host)) errors.push('project.host must be github or gitlab');
   if (project.tracker && !TRACKERS.includes(project.tracker)) errors.push(`project.tracker must be ${TRACKERS.join(', ')}`);

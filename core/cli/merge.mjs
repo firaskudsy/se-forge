@@ -10,6 +10,12 @@
 // Once merged, the ticket moves to Done and its issue closes (decision 118).
 // In a system (decision 130), it merges in the repository the plan's Repo: names, with that repository's settings,
 // and closes the issue on the system's board; a base branch that deploys on merge is left for a person (decision 133).
+//
+// forge merge <branch> (decision 148): the lead also merges the bootstrap's branches once the owner approved its review
+// (chore/architecture, chore/bootstrap-contract, chore/starter) and a ticket's contract branch (chore/<n>-contract,
+// from forge api apply). A contract branch changes only the contract and must pass forge api check at its head, a
+// breaking change only with the owner's decision (--breaking-approved); once merged, forge merge tags the merge commit
+// api-v<version> and pushes the tag. chore/architecture changes only documents; chore/starter needs green gates.
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -21,6 +27,7 @@ import { matchAny } from '../policy/lib/paths.mjs';
 import { readReport, PASSING } from '../policy/lib/reports.mjs';
 import { memberOf, systemOf, deploysOn, repoOf } from '../policy/lib/system.mjs';
 import { laneTarget, LaneError } from './lane.mjs';
+import { checkAt, ApiError } from './api.mjs';
 
 export { readReport };
 
@@ -71,8 +78,80 @@ function hostMerge(host, id, sha, cwd, env) {
     : run('glab', ['mr', 'merge', id, '--yes', '--sha', sha], cwd, env);
 }
 
-export function merge({ ticket, branch: given = null }, env, cwd, out) {
-  if (!ticket || !/^[\w.-]+$/.test(String(ticket))) throw new MergeError('forge merge <ticket> [--branch <name>]');
+const SETUP = /^chore\/(architecture|bootstrap-contract|starter|(\d+)-contract)$/;
+const DOCS = /(^|\/)(docs\/|README|CHANGELOG)|\.(md|mmd|svg|png)$/;
+
+function ready(host, id, cwd, env) {
+  return host === 'github' ? run('gh', ['pr', 'ready', id], cwd, env) : run('glab', ['mr', 'update', id, '--ready'], cwd, env);
+}
+
+// The bootstrap's branches and a ticket's contract branch (decision 148).
+function mergeSetup(branch, { breakingApproved = false }, env, cwd, out) {
+  const ctx = makeContext({ cwd }, env);
+  if (memberOf(ctx.mainRoot)) throw new MergeError(`${branch}: in a system, a person merges it in its repository.`);
+  const root = ctx.mainRoot;
+  const base = ctx.config.branches.base;
+  const kind = SETUP.exec(branch);
+  const contract = kind[1] === 'bootstrap-contract' || Boolean(kind[2]);
+  if (!git(root, ['fetch', '-q', 'origin', base, branch], 60000).ok) throw new MergeError(`git fetch origin ${base} ${branch} failed: is ${branch} pushed?`);
+  const head = git(root, ['rev-parse', `origin/${branch}`]).out;
+  const files = git(root, ['diff', '--name-only', `origin/${base}...origin/${branch}`]).out.split('\n').filter(Boolean);
+  const problems = [];
+  if (!files.length) problems.push(`${branch} changes nothing against ${base}`);
+  // The bootstrap's branches go in on the owner's approval of its review, which the lead records in review.md.
+  if (!kind[2]) {
+    const review = path.join(root, '.forge', 'project', 'bootstrap', 'review.md');
+    if (!/^\W*Approved\b/mi.test(fs.existsSync(review) ? fs.readFileSync(review, 'utf8') : '')) problems.push('the owner\'s approval of the bootstrap review is not recorded: once they approved, write "Approved: <date>, by the owner" at the top of .forge/project/bootstrap/review.md');
+  }
+  if (kind[1] === 'starter' && !readState(ctx, 'gates.json', {})[head]?.ok) problems.push(`gates have not passed on ${branch}@${head.slice(0, 8)} (forge gates on that commit)`);
+  if (kind[1] === 'architecture') {
+    const code = files.filter((f) => !DOCS.test(f));
+    if (code.length) problems.push(`${branch} changes more than documents (${code.slice(0, 3).join(', ')}): code goes in a ticket`);
+  }
+  let version = null;
+  if (contract) {
+    const other = files.filter((f) => !matchAny(ctx.config.paths.contract, f));
+    if (other.length) problems.push(`${branch} changes more than the contract (${other.slice(0, 3).join(', ')}): the rest goes in a ticket`);
+    if (!other.length && files.length) {
+      let c;
+      try { c = checkAt(env, root, `origin/${branch}`); } catch (e) { if (e instanceof ApiError) throw new MergeError(e.message); throw e; }
+      if (!c.ok) problems.push(`forge api check fails at ${head.slice(0, 8)}:\n${c.text.split('\n').slice(-6).map((l) => `    ${l}`).join('\n')}`);
+      else if (c.breaking && !breakingApproved) problems.push('the contract has breaking changes: the owner decides how consumers move (ask them; once they agree, forge merge ' + branch + ' --breaking-approved)');
+      version = c.version;
+      if (version && git(root, ['rev-parse', '--verify', '-q', `refs/tags/api-v${version}`]).ok) problems.push(`api-v${version} exists already: raise info.version`);
+    }
+  }
+  if (!problems.length) {
+    const req = findRequest(ctx.project.host, branch, base, root, env);
+    if (!req) problems.push(`no open MR/PR from ${branch} into ${base}`);
+    else if (req.sha !== head) problems.push(`MR/PR ${req.id} is at ${String(req.sha).slice(0, 8)}, origin/${branch} at ${head.slice(0, 8)}: fetch and check again`);
+    else {
+      if (req.draft) {
+        const r = ready(ctx.project.host, req.id, root, env);
+        if (!r.ok) throw new MergeError(`MR/PR ${req.id} is a draft and could not be marked ready: ${r.err || r.out}`);
+      }
+      const r = hostMerge(ctx.project.host, req.id, head, root, env);
+      if (!r.ok) throw new MergeError(`the host refused the merge of ${req.id}: ${r.err || r.out}`);
+      out(`merged ${branch}@${head.slice(0, 8)} into ${base} (MR/PR ${req.id})`);
+      if (version) {
+        // The approved contract's tag, on the merge commit (decision 148).
+        const fetched = git(root, ['fetch', '-q', 'origin', base], 60000);
+        const at = fetched.ok ? git(root, ['rev-parse', `origin/${base}`]).out : '';
+        const has = at && git(root, ['merge-base', '--is-ancestor', head, at]).ok;
+        const tagged = has && git(root, ['tag', `api-v${version}`, at]).ok && git(root, ['push', '-q', 'origin', `refs/tags/api-v${version}`], 60000).ok;
+        out(tagged ? `tagged api-v${version} on ${base}@${at.slice(0, 8)} and pushed it: API and UI work on it can start${kind[2] ? ` (put it on plan ${kind[2]}'s Contract: line)` : ''}` : `NOT TAGGED: tag api-v${version} on ${base} once the merge is there: forge merge ${branch} again does it`);
+        return tagged ? 0 : 1;
+      }
+      return 0;
+    }
+  }
+  out(`NOT MERGED: ${branch}@${head.slice(0, 8)} into ${base}\n${problems.map((p) => `- ${p}`).join('\n')}`);
+  return 1;
+}
+
+export function merge({ ticket, branch: given = null, breakingApproved = false }, env, cwd, out) {
+  if (SETUP.test(String(ticket ?? ''))) return mergeSetup(String(ticket), { breakingApproved }, env, cwd, out);
+  if (!ticket || !/^[\w.-]+$/.test(String(ticket))) throw new MergeError('forge merge <ticket> [--branch <name>] | <chore/architecture | chore/bootstrap-contract | chore/starter | chore/<n>-contract> [--breaking-approved]');
   let ctx = makeContext({ cwd }, env);
   const me = memberOf(ctx.mainRoot);
   let repoName = me?.repo ?? null;

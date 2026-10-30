@@ -19,6 +19,7 @@ The owner should never have to read a long message to find out what you need. Ev
 Free text alone is the last shape, not the first: when a list of likely answers exists, offer it, and the owner can still write their own.
 
 ## In the session: AskUserQuestion
+- **Not in the build for a ticket's questions** (decision 147): AskUserQuestion holds the whole session until the owner answers. A ticket's questions go in writing (below), ending with "Reply like #12 Q4 b, Q6 a", then `forge wait-owner <ticket>`; with no answer in time the ticket goes on hold (skill `pipeline`, step 2) and the build goes on.
 - Up to 4 questions per call; more questions go in the next call, most important first.
 - 2 to 4 options per question, each a label of a few words and a description of one line: what happens if chosen.
 - The recommended option first, its label ending in "(Recommended)".

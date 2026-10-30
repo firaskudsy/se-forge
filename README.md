@@ -68,7 +68,7 @@ flowchart TD
     D6a --> D7{"Stage 8 · One review, the panel's result first: you approve, or say what to change"}
     D7 -- "change: that stage runs again" --> D2
     D7 -- "approve" --> D8["Stage 9 · Merge requests: architecture, contract, starter code"]
-    D8 --> D9["You merge them in GitLab and approve the tag api-v1.0.0"]
+    D8 --> D9["The lead merges them and tags api-v1.0.0 (forge merge)"]
     D9 --> D10["The tickets are created in GitLab, labelled ai::ready"]
   end
   subgraph sys["F. An existing system of several repositories"]
@@ -82,7 +82,7 @@ flowchart TD
     Q -- "yes" --> Q1["You answer them, in one message"]
     Q -- "no" --> K{"Does the API change?"}
     Q1 --> K
-    K -- "yes" --> K1["You merge the contract change and tag it"]
+    K -- "yes" --> K1["The lead merges the contract change and tags it; a breaking one waits for your yes"]
     K -- "no" --> G{"Security or architecture?"}
     K1 --> G
     G -- "yes" --> G1["You approve the plan before the engineers start"]
@@ -152,9 +152,9 @@ plans, new dependencies, CI changes, deploy tools. Each agent also has a context
 Details: `core/policy/README.md`.
 
 ### The quality bar
-- **API contract first.** OpenAPI 3.1 in the backend repository; a person merges each change and tags
-  `api-v<version>`; API, UI and mobile work start only on an approved version (`forge api check` lints it and
-  catches breaking changes; `forge api generate` builds the client).
+- **API contract first.** OpenAPI 3.1 in the backend repository; each change goes in its own merge request, which
+  the lead merges and tags `api-v<version>` once `forge api check` passes (a breaking change waits for the owner);
+  API, UI and mobile work start only on a tagged version (`forge api generate` builds the client).
 - **Tests on every side**, the end-to-end flow each plan names, and **gates** that run inside the app's dev
   container, the same in CI and on a Mac. A ticket is done only when they pass on its last commit.
 - **Reviews on every merge request:** code, security (OWASP ASVS level 2 unless the decision register says
@@ -252,7 +252,7 @@ In a terminal (`forge help` for every option; one page for the team: [docs/cheat
 The hooks record every step of every session in `.forge/state/` (never your messages, file contents or command
 output; secrets masked), at no token cost. `forge dashboard` turns it into one local page: links to the project's repository and its folder in the team repo,
 when it could be done, where the project is, step by step from discovery to the release, with what waits for you,
-then nine tabs:
+then ten tabs:
 
 | Tab | Shows |
 |---|---|
@@ -264,6 +264,7 @@ then nine tabs:
 | Agents & skills | when sub-agents ran and the skills each had (preloaded or opened itself), by day, by role and by skill; the skills never used; what the lead did itself |
 | Screens | the app's screenshots, kept by QA when a UI ticket passes |
 | Run the app | whether it runs now, and the commands to start and stop it |
+| On hold | every ticket that waits for you, with its questions and the reply to paste in the lead's session |
 | Tickets | every ticket, the unpicked ones too, with its status on the board, tokens, cost, agents, rounds and estimate; its number opens its issue, ▸ opens its agents one by one with their skills; in a system, a Repo column and filter |
 
 `--watch` keeps the open page current. After each merge the lead writes a progress report from the same numbers.

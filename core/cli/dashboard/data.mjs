@@ -58,11 +58,13 @@ export function readCatalogue(folder) {
   let current = null;
   for (const line of read(path.join(folder, 'bootstrap', 'tickets.md')).split('\n')) {
     const h = DRAFT.exec(line);
-    if (h) { current = { t: h[1], title: h[2].trim(), stories: [], areas: [], estimate: null }; byT.set(h[1], current); continue; }
+    if (h) { current = { t: h[1], title: h[2].trim(), stories: [], areas: [], estimate: null, deps: [] }; byT.set(h[1], current); continue; }
     if (!current) continue;
     if (/^\s*-\s*\*\*Estimate:\*\*/.test(line)) current.estimate = hours(line);
     if (/^\s*-\s*\*\*Stor(y|ies):\*\*/.test(line)) current.stories = [...new Set(line.match(STORY) || [])];
     if (/^\s*-\s*\*\*Areas:\*\*/.test(line)) current.areas = AREAS(line.replace(/^.*\*\*Areas:\*\*/, ''));
+    // "- **Depends on:** T1, T3": the drafts this one needs merged first.
+    if (/^\s*-\s*\*\*Depends on:\*\*/i.test(line)) current.deps = [...new Set(line.replace(/^.*\*\*Depends on:\*\*/i, '').match(/\b(?:E\d+-)?T-?\d+[a-z]?\b/g) || [])];
   }
   // Each row's cells found by what they hold, not where: "| T-01 | Title | #10 | E1 | db |", or with an empty first
   // column as some leads write it. The epics' rows give their issue numbers, which are no ticket's.
@@ -80,7 +82,7 @@ export function readCatalogue(folder) {
     const epic = cells[n + 1] && !/^[—–-]$/.test(cells[n + 1]) ? cells[n + 1] : null;
     tickets.push({ num, t, title: ((n > i + 1 ? cells[i + 1] : '') || c.title || '').replace(/^(?:E\d+-)?T-?\d+[a-z]?\b[\s:.—–-]*/, ''), epic, stories: c.stories, areas: c.areas.length ? c.areas : AREAS(cells[n + 2]), estimate: c.estimate ?? null });
   }
-  return { tickets, epics, drafts: [...byT.values()].map((c) => ({ t: c.t, estimate: c.estimate })), planned: byT.size, estimated: [...byT.values()].filter((c) => c.estimate).length };
+  return { tickets, epics, drafts: [...byT.values()].map((c) => ({ t: c.t, estimate: c.estimate, deps: c.deps })), planned: byT.size, estimated: [...byT.values()].filter((c) => c.estimate).length };
 }
 
 export function readPlans(folder) {
@@ -100,6 +102,8 @@ export function readPlans(folder) {
       repo: field('Repo') || null,
       // "Status: …" may follow other words on its line ("Written 2026-10-11. Status: Merged into dev …").
       status: /\bStatus:\s*(.+)$/mi.exec(text)?.[1]?.replace(/[`*]/g, '').trim() ?? null,
+      // Section 6, the open questions and conflicts, as written: the On hold tab shows them (decision 147).
+      questions: /^##\s*6\.[^\n]*\n([\s\S]*?)(?=^##\s|(?![\s\S]))/m.exec(text)?.[1]?.trim() ?? '',
       stories: [...new Set(field('Sources').match(STORY) || [])],
       estimate: total ? { low: Number(total[1]), high: Number(total[2]) } : null,
     });
@@ -207,6 +211,8 @@ export function projectData({ main, folder, teamRoot, base, stateDir, repos = nu
       areas: p?.areas?.length ? p.areas : c?.areas || [],
       gates: p?.gates ?? null,
       planned: Boolean(p),
+      plan: p?.file ?? null,
+      questions: p?.questions ?? '',
       status: p?.status ?? null,
       // The plan's estimate, else metrics.md's, else the bootstrap draft's.
       estimate: p?.estimate ?? m?.estimate ?? c?.estimate ?? null,
