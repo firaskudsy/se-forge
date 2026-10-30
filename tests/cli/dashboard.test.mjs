@@ -372,7 +372,7 @@ test('forge timeline import: the history from Claude Code\'s logs, before the ho
   assert.equal(fs.readFileSync(path.join(w.state, 'timeline-import.jsonl'), 'utf8').trim().split('\n').length, lines.length, 'running it again replaces, never adds');
 });
 
-test('forge dashboard: one page with fifteen charts, the architecture, the screens, the app and the table in nine tabs, a CSV next to it', () => {
+test('forge dashboard: one page with sixteen charts, the architecture, the screens, the app and the table in nine tabs, a CSV next to it', () => {
   const w = world();
   write(path.join(w.state, 'timeline-2026-10.jsonl'), `${LINES.map((e) => JSON.stringify(e)).join('\n')}\n`);
   record({ buf: Buffer.from('a picture'), info: { type: 'png', width: 1280, height: 720 }, at: T0 + 30 * M, what: 'S1 the <data> model page', ticket: 10, branch: 'feat/10-data-model', commit: 'c0ffee12345678' }, w.folder);
@@ -384,8 +384,10 @@ test('forge dashboard: one page with fifteen charts, the architecture, the scree
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /2 tickets, 2 of 3 merged/);
   const html = fs.readFileSync(out, 'utf8');
-  for (const title of ['The project over time', 'Progress and forecast', 'Issues over time', 'Where each ticket\'s time goes', 'Waiting for you', 'Tokens per ticket, by model', 'Tokens per ticket, by stage', 'Who spends it, on which model', 'What the cost is made of', 'Tokens per day', 'Rework', 'Friction map', 'Tickets']) assert.ok(html.includes(esc(title)), title);
-  assert.equal((html.match(/<span class="num">/g) || []).length, 15);
+  for (const title of ['The project over time', 'Progress and forecast', 'Issues over time', 'Time per step', 'Where each ticket\'s time goes', 'Waiting for you', 'Tokens per ticket, by model', 'Tokens per ticket, by stage', 'Who spends it, on which model', 'What the cost is made of', 'Tokens per day', 'Rework', 'Friction map', 'Tickets']) assert.ok(html.includes(esc(title)), title);
+  assert.equal((html.match(/<span class="num">/g) || []).length, 16);
+  // Time per step first in the Time tab (decision 146), each step from its first file: this project has no bootstrap.
+  assert.ok(html.indexOf('Time per step') > html.indexOf('id="tab-time"') && html.indexOf('Time per step') < html.indexOf(esc('Where each ticket\'s time goes')));
   assert.deepEqual([...html.matchAll(/<button type="button" role="tab" [^>]*aria-selected="(\w+)" data-tab="(\w+)">/g)].map((x) => `${x[2]}:${x[1]}`), ['overview:true', 'architecture:false', 'time:false', 'cost:false', 'quality:false', 'skills:false', 'screens:false', 'app:false', 'tickets:false']);
   assert.deepEqual([...html.matchAll(/<section class="panel" id="tab-(\w+)"/g)].map((x) => x[1]), ['overview', 'architecture', 'time', 'cost', 'quality', 'skills', 'screens', 'app', 'tickets']);
   // The stepper between the totals and the tabs (decision 143); its current step pulses, unless the viewer asks for less motion.

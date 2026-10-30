@@ -462,18 +462,19 @@ charts, the app's screenshots and the tickets are in nine tabs:
 | | 2. Progress and forecast | stories and tickets done, and the projected finish date and cost |
 | | 3. Issues over time | the issues in GitLab by status, day by day: open, in progress, In Testing, closed. A growing pile in one colour is where the work waits |
 | Architecture | | the app as designed and as it runs (two component diagrams), the requirements with a **Download the SRS** button, the architecture overview, the decision records, the non-functional requirements, the API's endpoints and the standards every change follows; each document readable in the page and downloadable as Markdown |
-| Time | 4. Where each ticket's time goes | long orange stretches: waiting for you; long grey ones: nobody working (laptop asleep, a stuck session) |
-| | 5. Waiting for you | the kind of wait that costs the most time, and the longest waits: the first to remove |
-| Cost | 6. Cost per ticket, by model | tickets far above others of their size; a lot of Opus where Sonnet would do |
-| | 7. Cost per ticket, by stage | planning, building, reviews, QA, the lead: a stage that dominates every ticket |
-| | 8. Who spends it, on which model | the roles to make cheaper first, and what one spawn of each costs |
-| | 9. What the cost is made of | per model: new (input, cache writes), re-read (cache reads), output; cache reads are most of the tokens but cheap |
-| | 10. Spend per day | days that cost far more than the work done on them |
-| Quality | 11. Rework | what everything after the first review blocker cost |
-| | 12. Friction map | refusals and failures by role: the role or skill to fix, and refusals that should not happen |
-| Agents & skills | 13. Sub-agents and skills, day by day | days when most agents had no skill to work from, and the lead editing the app's files itself |
-| | 14. Roles and their skills | roles that never use the skills their instructions name |
-| | 15. Skills | the skills used, by whom and on which tickets, and the ones never used |
+| Time | 4. Time per step | each step of the stepper as AI time, your time (the work waiting for you) and idle: the steps where you were the wait |
+| | 5. Where each ticket's time goes | long orange stretches: waiting for you; long grey ones: nobody working (laptop asleep, a stuck session) |
+| | 6. Waiting for you | the kind of wait that costs the most time, and the longest waits: the first to remove |
+| Cost | 7. Cost per ticket, by model | tickets far above others of their size; a lot of Opus where Sonnet would do |
+| | 8. Cost per ticket, by stage | planning, building, reviews, QA, the lead: a stage that dominates every ticket |
+| | 9. Who spends it, on which model | the roles to make cheaper first, and what one spawn of each costs |
+| | 10. What the cost is made of | per model: new (input, cache writes), re-read (cache reads), output; cache reads are most of the tokens but cheap |
+| | 11. Spend per day | days that cost far more than the work done on them |
+| Quality | 12. Rework | what everything after the first review blocker cost |
+| | 13. Friction map | refusals and failures by role: the role or skill to fix, and refusals that should not happen |
+| Agents & skills | 14. Sub-agents and skills, day by day | days when most agents had no skill to work from, and the lead editing the app's files itself |
+| | 15. Roles and their skills | roles that never use the skills their instructions name |
+| | 16. Skills | the skills used, by whom and on which tickets, and the ones never used |
 | Screens | | what the app looked like, and when: the screenshots by day, with their ticket and what they show; click one to see it larger |
 | Run the app | | whether the app runs now (the page checks every few seconds), the commands to build, start and stop it with a Copy button each, and its addresses on your Mac |
 | Tickets | | every ticket, the ones nobody has picked yet too, with its status on the board; sortable by any column, its tokens and cost right after its status; click a ticket's number to open its issue in GitLab, and ▸ to see its agents one by one: the job each was given, its model, its skills, tokens, cost and time, with the lead's own share last. In a system, a Repo column and a filter by repository |

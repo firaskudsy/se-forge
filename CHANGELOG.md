@@ -8,6 +8,13 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ## [Unreleased]
 
+### Added
+- **Time per step** in the dashboard's Time tab (decision 146): each step of the stepper begun so far as AI time
+  (agents, gates, the lead's turns), owner time (the work waiting for you) and idle (nobody working), with the totals.
+  A step runs from its first file (its first write in the timeline, else its first commit in the team repo; the
+  setup and the release also from the client repo) to the start of the step that came next in time. The charts after
+  it move up one number: the Time tab is 4 to 6, Cost 7 to 11, Quality 12 and 13, Agents & skills 14 to 16.
+
 ## [0.2.45] - 2026-10-29
 
 ### Changed

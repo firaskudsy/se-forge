@@ -7,7 +7,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { git } from '../../policy/lib/context.mjs';
-import { stageOf, spawnTypes } from './measures.mjs';
+import { stageOf, spawnTypes, timeSplit } from './measures.mjs';
+import { summarize } from '../timeline.mjs';
 
 const read = (file) => { try { return fs.readFileSync(file, 'utf8'); } catch { return ''; } };
 const has = (file) => fs.existsSync(file);
@@ -250,4 +251,67 @@ export function stepsText(s) {
   }
   if (s.waiting.length) out.push(`Waiting for you: ${s.waiting.map((w) => `${w.step}: ${w.why}`).join('; ')}.`);
   return out;
+}
+
+// Each step's time (decision 146), for the Time tab: from the step's first file to the start of the step that came next
+// in time (a lead may draw the screens after the contract), split as a ticket's time is: the AI working (agents, gates,
+// the lead's turns), waiting for you, and nobody working. A step's first file is its first write in the timeline, else
+// its first commit in the team repo (forge init's .gitkeep files are no step's); the setup and the release also start
+// at their first commit in the client repo, the setup at the contract tag too. The first step begun also holds what
+// came before its first file (the discovery interview). Only the steps begun: the ones done and the current one, so far.
+const EVIDENCE = {
+  discovery: /(^|\/)bootstrap\/(questionnaire|decisions)\.md$/,
+  stories: /(^|\/)bootstrap\/user-stories\.md$/,
+  architecture: /(^|\/)architecture\/.+\.md$/,
+  screens: /(^|\/)bootstrap\/design-map\.md$/,
+  contract: /(^|\/)bootstrap\/contract\.yaml$/,
+  tickets: /(^|\/)bootstrap\/tickets(-(?!created)[\w-]+)?\.md$/,
+  panel: /(^|\/)bootstrap\/panel\/[^/]+$/,
+  review: /(^|\/)bootstrap\/review\.md$/,
+  setup: /(^|\/)bootstrap\/tickets-created\.md$/,
+  build: /(^|\/)plans\/\d+-[^/]*\.md$/,
+};
+const WRITES = /^(Write|Edit|MultiEdit|NotebookEdit)$/;
+export function stepTimes({ steps, folder, main, base = 'dev', lines = [], now = Date.now() }) {
+  if (!steps?.steps.length || !lines.length) return [];
+  const first = new Map();
+  const seen = (key, t) => { if (Number.isFinite(t) && t > 0 && !(first.get(key) <= t)) first.set(key, t); };
+  const match = (file, t) => { for (const [key, re] of Object.entries(EVIDENCE)) if (re.test(file)) seen(key, t); };
+  for (const e of lines) if (e.event === 'tool.start' && WRITES.test(e.tool || '')) match(String(e.what || ''), Date.parse(e.at));
+  let at = null;
+  for (const row of (folder ? git(folder, ['log', '--diff-filter=A', '--format=@%ct', '--name-only', '--', '.']).out || '' : '').split('\n')) {
+    if (row.startsWith('@')) at = Number(row.slice(1)) * 1000;
+    else if (row) match(row, at);
+  }
+  // The client repo: a branch's first commit, merged or not.
+  const repo = main ? repoFacts(main) : repoFacts(null);
+  const ref = (b) => [b, `origin/${b}`].find((r) => git(main, ['rev-parse', '--verify', '-q', r]).ok);
+  const from = ref(base);
+  const firstCommit = (branch) => {
+    const m = repo.merges.find((x) => x.from === branch);
+    const range = m ? `${m.hash}^1..${m.hash}^2` : ref(branch) && from ? `${from}..${ref(branch)}` : null;
+    const out = range ? git(main, ['log', '--format=%ct', '--reverse', range]).out.split('\n')[0] : '';
+    return out ? Number(out) * 1000 : null;
+  };
+  for (const b of main ? ['chore/architecture', 'chore/bootstrap-contract', 'chore/starter'] : []) seen('setup', firstCommit(b));
+  const tag = repo.tags.find((t) => t.startsWith('api-v'));
+  if (tag && main) seen('setup', Number(git(main, ['log', '-1', '--format=%ct', tag]).out) * 1000);
+  const release = [...repo.refs].filter((r) => /^chore\/release-v\d+\.\d+\.\d+$/.test(r)).sort().at(-1);
+  if (release) seen('release', firstCommit(release));
+
+  const begun = steps.steps.map((s, i) => ({ s, i, from: first.get(s.key) }))
+    .filter((x) => x.from !== undefined && x.s.state !== 'skip' && (steps.current === null || x.i <= steps.current));
+  if (!begun.length) return [];
+  const T = (e) => Date.parse(e.at);
+  const start = Math.min(...lines.map(T));
+  const last = Math.max(...lines.map(T));
+  const order = [...begun].sort((a, b) => a.from - b.from);
+  const waits = summarize(lines).waits;
+  return begun.map((x) => {
+    const k = order.indexOf(x);
+    const a = k === 0 ? Math.min(x.from, start) : x.from;
+    const b = k + 1 < order.length ? order[k + 1].from : steps.current === null ? last : Math.max(now, last);
+    const t = timeSplit(lines, a, Math.max(a, b), waits);
+    return { key: x.s.key, label: x.s.label, from: a, to: Math.max(a, b), open: x.i === steps.current, ai: t.agents + t.gates + t.lead, owner: t.waiting, idle: t.idle, total: t.total };
+  });
 }

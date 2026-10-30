@@ -1,5 +1,5 @@
 // forge dashboard (decisions 98 to 100, 122, 137, 143): one local HTML page with where the project is (steps.mjs), and
-// fifteen charts, the app's screenshots and a ticket table in nine tabs, from the project's own records (data.mjs) and
+// sixteen charts, the app's screenshots and a ticket table in nine tabs, from the project's own records (data.mjs) and
 // the measures (measures.mjs). No library, no network: the pictures are inside the page. Written next to a CSV.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -10,7 +10,7 @@ import { stackedBars, columns, gantt, burnup, dayStrips, flow, esc } from './svg
 import { BANDS, issueFlow, countsText, issueLinks, isEpic, fromBoard, issueTicket, webUrl, treeUrl } from './issues.mjs';
 import { git } from '../../policy/lib/context.mjs';
 import { renderArchitecture } from './architecture-view.mjs';
-import { projectSteps } from './steps.mjs';
+import { projectSteps, stepTimes } from './steps.mjs';
 import { renderSteps } from './steps-view.mjs';
 import { finish, finishText } from './finish.mjs';
 import { ticketUsage, ticketLimits, reached, teamPaths } from '../../policy/lib/limits.mjs';
@@ -90,7 +90,7 @@ export function dashboardModel({ main, folder, teamRoot, base, stateDir, prices 
   const timeline = projectTimeline(lines, { merges, shots: marks });
   // When the app could be done (decision 145), at the pace of the whole project, whatever --days or --ticket say.
   const end = finish({ steps, all, drafts: data.drafts, catalogue: data.catalogue, forecast: prog.forecast, timeline: days || only ? projectTimeline(everyLine) : timeline, now });
-  return { data, all, tickets: picked, every, table, only, kit, issues: tracked, app, architecture, watch, link, repoLinks: repoLinks({ main, folder, repos, origin }), lines, money, prices, now, since, shots, progress: prog, steps, finish: end, roles: roles(lines, prices), friction: friction(lines), timeline, skills };
+  return { data, all, tickets: picked, every, table, only, kit, issues: tracked, app, architecture, watch, link, repoLinks: repoLinks({ main, folder, repos, origin }), lines, money, prices, now, since, shots, progress: prog, steps, finish: end, stepTimes: stepTimes({ steps, folder, main, base, lines: everyLine, now }), roles: roles(lines, prices), friction: friction(lines), timeline, skills };
 }
 
 // The project's repositories on their host, for the links beside the page's title: the client repo (a system's
@@ -202,6 +202,12 @@ export function renderPage(m, { project }) {
 
   // Chart 1: where each ticket's time goes.
   const TIME = [{ key: 'agents', label: 'Agents working', cls: 'c-agents' }, { key: 'gates', label: 'Gates running', cls: 'c-gates' }, { key: 'waiting', label: 'Waiting for you', cls: 'c-waiting' }, { key: 'lead', label: 'Lead alone', cls: 'c-lead' }, { key: 'idle', label: 'Nobody working', cls: 'c-idle' }];
+  // Time per step (decision 146): each step begun, from its first file to the next step's start.
+  const STEP_TIME = [{ key: 'ai', label: 'AI time', cls: 'c-agents' }, { key: 'owner', label: 'Owner time: waiting for you', cls: 'c-waiting' }, { key: 'idle', label: 'Idle: nobody working', cls: 'c-idle' }];
+  const st = m.stepTimes ?? [];
+  const cStepTime = st.length ? stackedBars({ rows: st.map((r) => ({ label: `${r.label}${r.open ? ' (so far)' : ''}`, parts: { ai: r.ai / H, owner: r.owner / H, idle: r.idle / H }, right: `${duration(r.total)} · AI ${duration(r.ai)} · you ${duration(r.owner)}` })), keys: STEP_TIME, fmt: hrs, rightW: 260 })
+    + `<p class="fc">All ${st.length} step${st.length === 1 ? '' : 's'}: AI <b>${duration(st.reduce((s, r) => s + r.ai, 0))}</b>, you <b>${duration(st.reduce((s, r) => s + r.owner, 0))}</b>, idle ${duration(st.reduce((s, r) => s + r.idle, 0))}, from ${esc(when(st.reduce((s, r) => Math.min(s, r.from), Infinity)))}.</p>`
+    : '<p class="empty">No step has begun in the timeline yet: a step starts with its first file (bootstrap/questionnaire.md, user-stories.md, …).</p>';
   const c1 = stackedBars({ rows: timed.map((t) => ({ label: label(t), parts: Object.fromEntries(TIME.map((k) => [k.key, t.split[k.key] / H])), right: `${duration(t.split.total)}${t.open ? ' so far' : ''} · you ${duration(t.split.waiting)}` })), keys: TIME, fmt: hrs });
 
   // The project over time: the AI's lane and your lane, one row per day.
@@ -372,7 +378,7 @@ export function renderPage(m, { project }) {
     'A ticket runs from its first line to its merge. The lead\'s lines without a ticket count for every ticket running at that moment. A stretch of 15 minutes with nothing happening counts as nobody working.',
     'Working time: the AI at work (agents, gates, the lead\'s turns), each moment once, from the first line to the last: without the waits for you, and without the stretches of 15 minutes with nothing happening (a laptop asleep, a closed session). The top lane of chart 1, added up.',
     money ? 'Cost: what the same tokens would cost on the API at the prices in project.prices, not the subscription bill.' : 'No prices: add project.prices to project.json for the API cost (docs/metrics.md).',
-    m.data.tickets.some((t) => t.planned && !t.estimate) ? 'Plans without an Estimate section have no estimate in chart 6 or the table.' : '',
+    m.data.tickets.some((t) => t.planned && !t.estimate) ? 'Plans without an Estimate section have no estimate in chart 7 or the table.' : '',
   ].filter(Boolean);
 
   return `<!doctype html>
@@ -423,18 +429,19 @@ ${panel('overview', `${card(1, 'The project over time', 'Where did the work wait
 ${card(2, 'Progress and forecast', 'When will the project be done, and what will it cost?', c6a + fcText + c6b)}
 ${card(3, 'Issues over time', 'Is the board shrinking? Every issue in the tracker by its status, from its creation to now: hover for the counts at any moment.', cIssues)}`)}
 ${panel('architecture', `<section class="card arch"><h2>Architecture</h2><p class="q">How the app is built and what it must do: the approved documents, the standards every change follows, and the components as designed and as they run. Each document downloads as Markdown.</p>${renderArchitecture(m.architecture)}</section>`)}
-${panel('time', `${card(4, 'Where each ticket\'s time goes', 'How much of the delay is people, not AI? Each moment counted once, in the legend\'s order.', legend(TIME) + c1)}
-${card(5, 'Waiting for you', 'What the work waited for you on, and the longest waits: the ones to remove first.', legend(kinds) + cKinds + waitList)}`)}
-${panel('cost', `${card(6, `${money ? 'Cost' : 'Tokens'} per ticket, by model`, 'Which tickets cost far more than others of their size, and is the model mix right?', costNote + legend(MODELS.filter((k) => withTokens.some((t) => byFamily(t.lines, m.prices, money)[k.key]))) + c2)}
-${card(7, `${money ? 'Cost' : 'Tokens'} per ticket, by stage`, 'Where in a ticket the money goes: planning, building, reviews, QA or the lead.', costNote + legend(STAGE_KEYS.filter((k) => stageRows.some((r) => r.parts[k.key]))) + cStages)}
-${card(8, 'Who spends it, on which model', 'Which agent to make cheaper first: largest first, with the running share and the cost of one spawn.', costNote + legend(rolesModels) + cRoles)}
-${card(9, 'What the cost is made of', 'Each model by token kind: cache reads are most of the tokens and the cheapest; output and cache writes cost the most per token.', costNote + legend(KINDS) + cComp)}
-${card(10, `${money ? 'Spend' : 'Tokens'} per day`, 'How the spend moves from day to day, by model.', costNote + legend(MODELS.filter((k) => days.some((d) => d.tokens[k.key]))) + cDaily)}`)}
-${panel('quality', `${card(11, 'Rework', 'What the first blocker costs: everything after the first review round with a blocker.', legend([{ label: 'First pass', cls: 'c-first' }, { label: 'After the first blocker', cls: 'c-rework' }]) + c4)}
-${card(12, 'Friction map', 'Where agents hit walls: refusals by rule and failed commands, per role. The colour is the tokens of the replies that made them.', c5)}`)}
-${panel('skills', `${card(13, 'Sub-agents and skills, day by day', 'When did sub-agents run, and did they have their playbooks? Each day: the agents started, with a skill (preloaded, or opened itself) or with none.', legend(SKILL_KEYS) + cSkillDays + skillsText)}
-${card(14, 'Roles and their skills', 'Which roles work from their skills, and which skip the ones their instructions name.', cSkillRoles)}
-${card(15, 'Skills', 'Which skills were used, by whom and on which tickets; and the ones never used.', cSkills)}`)}
+${panel('time', `${card(4, 'Time per step', 'Where did each step\'s time go? Each step from its first file to the start of the next: the AI working, waiting for you, and nobody working (a closed session, a laptop asleep, a night).', legend(STEP_TIME) + cStepTime)}
+${card(5, 'Where each ticket\'s time goes', 'How much of the delay is people, not AI? Each moment counted once, in the legend\'s order.', legend(TIME) + c1)}
+${card(6, 'Waiting for you', 'What the work waited for you on, and the longest waits: the ones to remove first.', legend(kinds) + cKinds + waitList)}`)}
+${panel('cost', `${card(7, `${money ? 'Cost' : 'Tokens'} per ticket, by model`, 'Which tickets cost far more than others of their size, and is the model mix right?', costNote + legend(MODELS.filter((k) => withTokens.some((t) => byFamily(t.lines, m.prices, money)[k.key]))) + c2)}
+${card(8, `${money ? 'Cost' : 'Tokens'} per ticket, by stage`, 'Where in a ticket the money goes: planning, building, reviews, QA or the lead.', costNote + legend(STAGE_KEYS.filter((k) => stageRows.some((r) => r.parts[k.key]))) + cStages)}
+${card(9, 'Who spends it, on which model', 'Which agent to make cheaper first: largest first, with the running share and the cost of one spawn.', costNote + legend(rolesModels) + cRoles)}
+${card(10, 'What the cost is made of', 'Each model by token kind: cache reads are most of the tokens and the cheapest; output and cache writes cost the most per token.', costNote + legend(KINDS) + cComp)}
+${card(11, `${money ? 'Spend' : 'Tokens'} per day`, 'How the spend moves from day to day, by model.', costNote + legend(MODELS.filter((k) => days.some((d) => d.tokens[k.key]))) + cDaily)}`)}
+${panel('quality', `${card(12, 'Rework', 'What the first blocker costs: everything after the first review round with a blocker.', legend([{ label: 'First pass', cls: 'c-first' }, { label: 'After the first blocker', cls: 'c-rework' }]) + c4)}
+${card(13, 'Friction map', 'Where agents hit walls: refusals by rule and failed commands, per role. The colour is the tokens of the replies that made them.', c5)}`)}
+${panel('skills', `${card(14, 'Sub-agents and skills, day by day', 'When did sub-agents run, and did they have their playbooks? Each day: the agents started, with a skill (preloaded, or opened itself) or with none.', legend(SKILL_KEYS) + cSkillDays + skillsText)}
+${card(15, 'Roles and their skills', 'Which roles work from their skills, and which skip the ones their instructions name.', cSkillRoles)}
+${card(16, 'Skills', 'Which skills were used, by whom and on which tickets; and the ones never used.', cSkills)}`)}
 ${panel('screens', `<section class="card"><h2>Screens</h2><p class="q">What the app looked like, and when: the pictures kept with forge shot, oldest first. Click one to see it larger.</p>${cShots}</section>`)}
 ${panel('app', `<section class="card"><h2>Run the app</h2><p class="q">See the app as it is now: build and start its containers on this Mac, then open it.</p>${cApp}</section>`)}
 ${panel('tickets', `<section class="card"><h2>Tickets</h2><p class="q">Every ticket, the ones nobody has picked yet too, with its status on the board${!m.issues ? ' (no tracker: the status comes from the records)' : !m.issues.readAt ? ' (the board has not been read yet: run forge dashboard without --offline; until then the status comes from the records)' : ''}. Click a column to sort, a ticket's number to open its issue, and ▸ to see its agents one by one (the job each was given, its model, its skills, tokens and time; the lead's own turns last). The same rows are in dashboard.csv next to this page.</p>${table}</section>`)}

@@ -236,31 +236,32 @@ not pulse.
 3. **Issues over time** (decision 122): every issue in the tracker by its status from its creation to now, stacked: open, in progress, In Testing, closed (a Done status counts as closed). It comes from each issue's label and state history (GitLab's resource events, GitHub's issue events), kept in `.forge/state/issues.json`, so a later build fetches only the issues that changed. A build reads at most 40 issues' histories (two calls each: gitlab.com's free plan allows 100 calls a minute) and leaves the rest, or those a rate limit stopped, to the next build, and says how many are still to read; when the tracker cannot be reached, the chart is the last read and says so. Epics are left out: they stay open while their tickets close. Hover for the counts at any moment. `forge dashboard --text` prints the counts now as its `Issues:` line.
 
 **Time**
-4. **Where each ticket's time goes:** agents working, gates running, waiting for you, the lead alone, nobody working, each moment counted once in that order; a wait counts when nothing else runs.
-5. **Waiting for you:** the waits by kind (how many, how long, the longest), and the eight longest with the tickets running then.
+4. **Time per step** (decision 146): each step of the stepper begun so far, the current one too (so far), as AI time (agents, gates, the lead's turns), owner time (waiting for you) and idle (nobody working). A step runs from its first file (its first write in the timeline, else its first commit in the team repo; the setup and the release also from their first commit in the client repo) to the start of the step that came next in time, since a lead may draw the screens after the contract; the first step also holds what came before its first file, the discovery interview. Each moment counts once, as in chart 5.
+5. **Where each ticket's time goes:** agents working, gates running, waiting for you, the lead alone, nobody working, each moment counted once in that order; a wait counts when nothing else runs.
+6. **Waiting for you:** the waits by kind (how many, how long, the longest), and the eight longest with the tickets running then.
 
 **Cost**
-6. **Cost per ticket, by model,** with the estimate (the plan's, else `metrics.md`'s, else the bootstrap draft's), your hours and the areas.
-7. **Cost per ticket, by stage:** planning (planner, analysts, architect, designer), building (the engineers), reviews (the reviewers and the spec checker), QA, the lead, other.
-8. **Who spends it, on which model:** each role split by model, largest first, with the running share and the cost of one spawn.
-9. **What the cost is made of:** each model by token kind (new: input, 5-minute and 1-hour cache writes; re-read: cache reads; output), with the share of cache reads and output.
-10. **Spend per day,** by model.
+7. **Cost per ticket, by model,** with the estimate (the plan's, else `metrics.md`'s, else the bootstrap draft's), your hours and the areas.
+8. **Cost per ticket, by stage:** planning (planner, analysts, architect, designer), building (the engineers), reviews (the reviewers and the spec checker), QA, the lead, other.
+9. **Who spends it, on which model:** each role split by model, largest first, with the running share and the cost of one spawn.
+10. **What the cost is made of:** each model by token kind (new: input, 5-minute and 1-hour cache writes; re-read: cache reads; output), with the share of cache reads and output.
+11. **Spend per day,** by model.
 
 **Quality**
-11. **Rework:** the first pass against everything after the first review round with a blocker; review rounds and gate send-backs.
-12. **Friction map:** refusals by rule and failed commands, by role; the colour is the tokens of the replies that made them. Below: the most frequent refusal reasons, word for word.
+12. **Rework:** the first pass against everything after the first review round with a blocker; review rounds and gate send-backs.
+13. **Friction map:** refusals by rule and failed commands, by role; the colour is the tokens of the replies that made them. Below: the most frequent refusal reasons, word for word.
 
 **Agents & skills** (decision 137): when sub-agents ran, and the skills each had to work from. A skill is **preloaded**
 when the agent's start line names it (its agent file's `skills:` list, which Claude Code loads before the agent's first
 turn; recorded from 0.2.33) and **opened** when an agent or the lead loaded it itself (a Skill call, or a read of its
 `SKILL.md`).
-13. **Sub-agents and skills, day by day:** each day's agents, with a skill or with none, and the skills opened and
+14. **Sub-agents and skills, day by day:** each day's agents, with a skill or with none, and the skills opened and
     preloaded. Below: how many agents had a skill, and what the lead did itself: its calls, the sub-agents it started,
     the skills it opened, and the app's own files it edited (a path in the checkout outside `.forge/`), which is work a
     lane should do.
-14. **Roles and their skills:** per role, its agents, how many had a skill, the skills preloaded and opened, and the
+15. **Roles and their skills:** per role, its agents, how many had a skill, the skills preloaded and opened, and the
     skills its instructions name that no agent of it used (another stack's guides left out).
-15. **Skills:** each skill used, how often opened and preloaded, by which roles, on which tickets and when last; then
+16. **Skills:** each skill used, how often opened and preloaded, by which roles, on which tickets and when last; then
     the skills never used, and apart the guides for stacks this project does not use (from `project.stack`).
 
 **Screens:** the pictures kept with `forge shot`, by day, oldest first, each with its time, ticket, what it shows,
@@ -321,7 +322,7 @@ the model wrote, its thinking included. `forge dashboard --text` prints the same
 - **Repos:** the project's repository and its folder in the team repo on their host, from their `origin` remotes (a system's member repositories too; none for a remote on this machine); the page links them beside its title;
 - the KPIs, the forecast, **Finish:** the finish card's AI work left (days nonstop, hours) and when it lands on the calendar at the pace, the scope (the bootstrap's tickets and the ones added since, when the bootstrap has a ticket list) and the time of the last line in the timeline;
 - **Issues:** the tracker's issues now by status (open, in progress, In Testing, closed; epics not counted), with when they were read, or the last read and why the tracker could not be read now (chart 3);
-- **Open:** each ticket started and not merged, with its plan's `Status:` line, estimate, time so far split as in chart 4, review rounds, agents and cost;
+- **Open:** each ticket started and not merged, with its plan's `Status:` line, estimate, time so far split as in chart 5, review rounds, agents and cost;
 - **Not started**, then **Merged**, newest first (the ten newest in full);
 - **Look at:** for open tickets only, two or more review rounds with a blocker (the pipeline asks the owner after two), time past the estimate's high end, a plan whose status says blocked or waiting for the owner (decision 139); a branch whose lane stopped with GATES-FAILED and that no green gate run has passed since; and 15 minutes with nothing happening while tickets are open;
 - **Longest waits for you:** the five longest, with the tickets running then.

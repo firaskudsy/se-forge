@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { sh } from '../policy/helpers.mjs';
-import { projectSteps, stepsText, repoFacts } from '../../core/cli/dashboard/steps.mjs';
+import { projectSteps, stepsText, repoFacts, stepTimes } from '../../core/cli/dashboard/steps.mjs';
 import { renderSteps } from '../../core/cli/dashboard/steps-view.mjs';
 import { readCatalogue, readStories } from '../../core/cli/dashboard/data.mjs';
 
@@ -231,3 +231,35 @@ test('the release: merged into dev, promoted branch by branch, tagged; then ever
   assert.deepEqual(stepsText(s), ['Step: all 2 done (v1.2.0).']);
   assert.match(renderSteps(s), /<p class="ss-h"><b>All 2 steps done<\/b> · v1\.2\.0<\/p>/);
 });
+
+test('time per step: from each step\'s first file to the next step\'s start in time, split into the AI, waiting for you and nobody working', () => {
+  const T0 = Date.parse('2026-10-25T20:00:00Z');
+  const at = (min) => new Date(T0 + min * 60000).toISOString();
+  const write = (min, file) => ({ at: at(min), event: 'tool.start', who: 'lead', tool: 'Write', what: `.forge/project/${file}` });
+  const lines = [
+    { at: at(0), event: 'prompt', who: 'human' },
+    write(1, 'bootstrap/questionnaire.md'),
+    { at: at(5), event: 'turn.end', who: 'lead' },
+    { at: at(15), event: 'prompt', who: 'human' },
+    write(16, 'bootstrap/user-stories.md'),
+    { at: at(17), event: 'agent.start', who: 'product-analyst', agent: 'a1' },
+    { at: at(27), event: 'agent.stop', who: 'product-analyst', agent: 'a1' },
+    // The contract before the screens, as a lead may do it.
+    write(30, 'bootstrap/contract.yaml'),
+    write(40, 'bootstrap/design-map.md'),
+    write(50, 'bootstrap/tickets.md'),
+    { at: at(60), event: 'turn.end', who: 'lead' },
+  ];
+  const keys = [['discovery', 'Discovery', 'done'], ['stories', 'Stories', 'done'], ['architecture', 'Architecture', 'skip'], ['screens', 'Screens', 'done'], ['contract', 'Contract', 'done'], ['tickets', 'Tickets', 'now'], ['panel', 'Panel', 'todo']];
+  const steps = { steps: keys.map(([key, label, state]) => ({ key, label, state })), current: 5 };
+  const rows = stepTimes({ steps, folder: temp('forge-steps-time-'), main: null, lines, now: T0 + 70 * 60000 });
+  const M = 60000;
+  assert.deepEqual(rows.map((r) => [r.label, (r.from - T0) / M, (r.to - T0) / M, r.open]), [
+    ['Discovery', 0, 16, false], ['Stories', 16, 30, false], ['Screens', 40, 50, false], ['Contract', 30, 40, false], ['Tickets', 50, 70, true],
+  ], 'in the stepper\'s order, each from its first file to the next start in time; the first from the first line');
+  assert.equal(rows[0].owner, 10 * M, 'the discovery waited 10 minutes for the owner\'s reply');
+  assert.ok(rows[1].ai >= 10 * M, 'the stories\' analyst worked 10 minutes');
+  for (const r of rows) assert.equal(r.ai + r.owner + r.idle, r.total, `${r.label}: each moment once`);
+  assert.deepEqual(stepTimes({ steps, folder: null, main: null, lines: [], now: T0 }), [], 'no timeline, no times');
+});
+
