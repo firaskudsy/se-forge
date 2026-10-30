@@ -8,6 +8,8 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ## [Unreleased]
 
+## [0.2.47] - 2026-10-30
+
 ### Added
 - **The lead merges the bootstrap's and the contract's merge requests** (decision 148). `forge merge <branch>` takes
   `chore/architecture` (documents only), `chore/bootstrap-contract` and `chore/starter` (green gates) once the owner's
