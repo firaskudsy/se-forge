@@ -8,6 +8,8 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ## [Unreleased]
 
+## [0.2.50] - 2026-11-01
+
 ### Added
 - **What needs you pops up, with a sound** (decision 155). The dashboard page shows a popup listing everything that
   waits for you (the stepper's "Waiting for you", and every prompt open in a session now: a permission prompt, a forge
