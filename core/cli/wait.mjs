@@ -2,7 +2,7 @@
 // wait lasts policy.hold.minutes (10) from its first call for that ticket; one call waits at most 5 minutes, so it fits
 // a shell command's time, and returns as soon as the owner writes in the session (a prompt line in the timeline after
 // the wait began). It prints one word first, then what to do:
-//   ANSWERED  the owner wrote: read their message and carry on with the ticket;
+//   ANSWERED  the owner wrote, or approved the ticket with forge approve (decision 149): carry on with it;
 //   WAITING   no answer yet: run it again;
 //   HOLD      no answer in time: put the ticket on hold and take the next one that does not depend on it.
 import fs from 'node:fs';
@@ -15,6 +15,13 @@ const POLL = 5000;
 const FILE = /^timeline-\d{4}-\d{2}\.jsonl$/;
 const readJson = (file) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; } };
 const clock = (t) => new Date(t).toTimeString().slice(0, 5);
+
+// The owner's forge approve of this ticket after since (decision 149): it writes no prompt line.
+function approvedAt(stateDir, num, since) {
+  const all = readJson(path.join(stateDir, 'approvals.json')) ?? {};
+  const times = Object.values(all).flatMap((e) => e.history ?? []).filter((h) => h.gate === 'owner' && String(h.ticket) === num).map((h) => Date.parse(h.at)).filter((t) => t > since);
+  return times.length ? Math.min(...times) : null;
+}
 
 // A prompt from the owner after since, in the timeline's newest file (the hooks write every prompt there).
 function answeredAt(stateDir, since) {
@@ -53,6 +60,12 @@ export async function waitOwner(o, { main, config, out, now = Date.now, sleep = 
   fs.writeFileSync(file, `${JSON.stringify({ ticket: num, since: new Date(since).toISOString() })}\n`);
   const until = Math.min(since + total, now() + STEP);
   for (;;) {
+    const ok = approvedAt(stateDir, num, since);
+    if (ok) {
+      done();
+      out(`ANSWERED: the owner approved #${num} at ${clock(ok)} (forge approve). Set its plan's status line back to where it is, forge tracker status ${num} "In Progress" if it was on hold, and carry on with it.`);
+      return 0;
+    }
     const at = answeredAt(stateDir, since);
     if (at) {
       done();

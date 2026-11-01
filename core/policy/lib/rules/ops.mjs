@@ -235,10 +235,24 @@ function docker(c, a0) {
 }
 
 const URL_HOST = /^[a-z][a-z0-9+.-]*:\/\/(?:[^@/\s]*@)?(\[[^\]]+\]|[^:/\s?#]+)/i;
+// The Figma plugin's tools hand back each picture as a link under www.figma.com/api/mcp/asset/. Downloading one reads
+// the project's own design, so it needs no prompt when the project names a Figma file (decision 149); a command that
+// sends data still asks.
+const FIGMA_ASSET = /^https:\/\/www\.figma\.com\/api\/mcp\/asset\/[\w.-]+$/i;
+const SENDS = /^(-[a-zA-Z]*[dFTX]|--(data|form|upload|json|request|post|body|method))/;
+const figmaReads = (argv, ctx) => Boolean(ctx.project.figma?.fileKey) && !argv.slice(1).some((a) => SENDS.test(a));
+// `curl -o /tmp/a.png <picture link>`: a download of the Figma plugin's pictures and nothing else, allowed without a
+// prompt (allow.mjs).
+export function figmaDownload(argv, ctx) {
+  const urls = argv.slice(1).filter((a) => URL_HOST.test(a));
+  return ['curl', 'wget'].includes(argv[0]) && figmaReads(argv, ctx) && urls.length > 0 && urls.every((a) => FIGMA_ASSET.test(a));
+}
 function network(argv, a0, ctx) {
   if (['nc', 'ncat', 'netcat', 'telnet', 'socat'].includes(a0)) return [ask('net:outside', `\`${a0}\` opens raw network connections.`)];
   const allow = ctx.config.network.allowHosts.map((h) => h.toLowerCase());
-  const hosts = argv.slice(1).map((a) => URL_HOST.exec(a)?.[1]?.replace(/^\[|\]$/g, '').toLowerCase()).filter(Boolean);
+  const figma = figmaReads(argv, ctx);
+  const hosts = argv.slice(1).filter((a) => !(figma && FIGMA_ASSET.test(a)))
+    .map((a) => URL_HOST.exec(a)?.[1]?.replace(/^\[|\]$/g, '').toLowerCase()).filter(Boolean);
   const outside = hosts.filter((h) => !allow.includes(h) && !allow.some((a) => a.startsWith('*.') && h.endsWith(a.slice(1))) && !h.endsWith('.localhost'));
   return outside.length ? [ask('net:outside', `\`${a0}\` contacts ${outside[0]}, which is not on the project's network allowlist.`)] : [];
 }
@@ -258,6 +272,17 @@ export function packageName(spec) {
 export function approvedAdd(names, ctx) {
   const ok = new Set((ctx?.config?.deps?.approved || []).map((n) => packageName(n)));
   return names.length > 0 && names.every((n) => ok.has(packageName(n)));
+}
+
+// An install of only packages the register approved (policy.deps.approved), as `npm install better-auth pg-boss` or
+// `pnpm add x`: allowed without a prompt (decision 149).
+const ADDS = { npm: ['install', 'i', 'add', 'in'], pnpm: ['add'], yarn: ['add'], bun: ['add'], pip: ['install'], pip3: ['install'], uv: ['add'], poetry: ['add'], pipenv: ['install'] };
+const VALUE_FLAGS = ['--prefix', '-C', '--filter', '-w', '--workspace', '-r', '--requirement', '-c', '--constraint', '-e', '--editable', '-i', '--index-url', '-t', '--target'];
+export function approvedInstall(argv, ctx) {
+  const [a0, ...args] = argv;
+  if (!ADDS[a0] || args.includes('-g') || args.includes('--global')) return false;
+  const [cmd, ...rest] = positionals(args, VALUE_FLAGS);
+  return ADDS[a0].includes(cmd) && approvedAdd(rest.filter((w) => !w.startsWith('.') && !w.startsWith('/')), ctx);
 }
 
 function dependencies(argv, a0, ctx) {

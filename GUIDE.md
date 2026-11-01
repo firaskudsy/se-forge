@@ -91,7 +91,7 @@ flowchart TD
   class A,B,C1,C2,C3,C4,D1a,D7,D9,Q1,K1,G1,FU,F1,F2,S1,S2,S3,S4,L2,E6P you
 ```
 
-Everything the kit needs from you comes as choices, in every phase: pick one (A, B, C, the recommended one first), tick any (`[ ]`), yes or no, or your own words when nothing fits. In the session you click or type a number; in a report you reply like `1A 2B 3[31]` (decision 136). What only you can do (a command to run, a merge request to merge, a tag) comes last in the lead's message as **Your turn**: numbered steps in the order to do them, each saying where (in the session with `!`, a terminal in a folder, the browser and which buttons), the exact command to paste and how you know it worked; you do them and reply `done` (decision 144). Questions about security or architecture always wait for you. In the build, a ticket that needs you never holds up the others: the lead asks, waits 10 minutes (`policy.hold.minutes`), then puts the ticket **on hold** and takes the next one that does not depend on it; the dashboard's On hold tab lists it with its questions and the reply to paste, and the lead takes it back up once you answer (decision 147). A ticket never loops for ever: at its limit it is parked until you decide. For an existing system, reading it into documents (`/onboard`) and change requests (`/change`) come next; until then you put its tickets on the board (part F).
+Everything the kit needs from you comes as choices, in every phase: pick one (A, B, C, the recommended one first), tick any (`[ ]`), yes or no, or your own words when nothing fits. In the session you click or type a number; in a report you reply like `1A 2B 3[31]` (decision 136). What only you can do (a command to run, a merge request to merge, a tag) comes last in the lead's message as **Your turn**: numbered steps in the order to do them, each saying where (in the session with `!`, a terminal in a folder, the browser and which buttons), the exact command to paste and how you know it worked; you do them and reply `done` (decision 144). Questions about security or architecture always wait for you. In the build, a ticket that needs you never holds up the others: the lead asks, waits 10 minutes (`policy.hold.minutes`), then puts the ticket **on hold** and takes the next one that does not depend on it; the dashboard's On hold tab lists it with its questions and the reply to paste, and the lead takes it back up once you answer (decision 147). An approval (a plan that touches security or the architecture, a package not yet approved) you give by typing `! forge approve <ticket>` (with `--package <name>` for a package) in the lead's session: it is yours alone, and no agent waits on a prompt for it (decision 149). A ticket never loops for ever: at its limit it is parked until you decide. For an existing system, reading it into documents (`/onboard`) and change requests (`/change`) come next; until then you put its tickets on the board (part F).
 
 ---
 
@@ -392,6 +392,7 @@ How a run behaves, so nothing surprises you:
 | See or lift a ticket's limits | `forge limits` (each open ticket's lanes, review rounds and QA fails against its limits); `forge limits lift 12` lets a parked ticket go on |
 | Report that something merged doesn't work | tell the lead in its session; it files a `[Bug]` naming the ticket, and the project manager triages it |
 | Close the laptop or go offline mid-work | type `/pause` and wait for "Safe to close"; later, in a fresh session, `/resume` |
+| Move a project's work to another machine | `/pause`, then `forge export` here and `forge import <file>` there (part I) |
 | See what the agents left behind | `forge worktrees` (running, done or unfinished; `--clean` removes the done ones) |
 | See where a ticket's time and tokens went | `forge timeline 12`: waits for you, agents, gates, refusals, failures, tokens by model and by who, and the cost once prices are set; `--csv` for a spreadsheet (`docs/metrics.md`) |
 | See the whole project in charts | `forge dashboard` (part E) |
@@ -442,8 +443,9 @@ forge dashboard --watch
 ```
 It builds one page on your Mac and opens it in the browser, with a CSV next to it. The page is a snapshot: a
 browser refresh shows the same one, and `forge dashboard` again makes a new one. **`--watch`** keeps it current:
-it makes a new page every 5 minutes (`--every 2` for two) until you press Ctrl+C, and the open page reloads itself
-after each, on the same tab and at the same place. It combines the timeline with
+it looks every 30 seconds (`--every 10s`, `--every 2m`) until you press Ctrl+C, makes a new page when anything
+changed (and reads GitLab every 5 minutes), and the open page reloads itself after each, on the same tab and at the
+same place. It combines the timeline with
 the project's stories, tickets, plans and estimates, review rounds and merges, and reads the issues' history from
 GitLab for chart 3 (`--offline` skips that and uses the last read; the first read of a project takes a few seconds
 per ten issues, later ones only fetch what changed). The page itself needs no internet. Beside the title, two links
@@ -764,6 +766,50 @@ overwrite them.
 - Agents never read the key (`[llm:key]`, `[keychain:password]`) and never choose the server (`[llm:person]`): a
   person runs `forge llm use`, in a terminal or with `!` in the session.
 - The checkout's kit is 0.2.38 or later (`forge upgrade --to 0.2.38`): its hooks guard the key and turn pacing off.
+
+---
+
+## I. Moving a project to another machine
+
+The app's branches and the team repo's plans already travel by git. What lives only in the app's checkout is
+`.forge/handoffs` (the lead's handover, which `/resume` continues from) and `.forge/state` (the timeline behind
+the dashboard, the gates approved per branch, each ticket's lanes for its limits, the tracker's last read).
+`forge export` and `forge import` move those two (decision 151); neither copies a key or a `.env`.
+
+**On the machine the project runs on now:**
+1. In the lead's session, `/pause`, and wait for "Safe to close".
+2. `forge export --check` says whether it is ready and what it would carry; each problem names its fix (a running
+   agent, a change not saved with `forge save`, a branch with commits on no remote, no lead handover).
+3. `forge export` writes `~/<app>-forge-<date>-<time>.tgz` and prints the steps for the other machine. This
+   checkout is then marked as moved: a lead started here is told to start nothing. Never run a project on two
+   machines at once: two leads would take the same tickets.
+
+**On the other machine,** after part B (the tools, GitLab access, `forge` at the project's version):
+```
+scp <old machine>:~/acme-forge-20261031-1945.tgz ~
+git clone git@gitlab.example.com:<group>/se-forge-projects.git ~/code/se-forge-projects
+forge setup --team-repo ~/code/se-forge-projects --kit-repo <git url of se-forge>
+git clone git@gitlab.example.com:<group>/acme.git ~/code/acme && cd ~/code/acme
+forge import ~/acme-forge-20261031-1945.tgz
+```
+`forge import` checks the clone and the team repo are the ones the export came from and up to date, runs
+`forge init`, puts the handovers and state back, and ends with **Your turn**: the model server's key and
+`forge llm add`/`use` when the project ran on one (part H), the app's `.env` files, `forge doctor`, then `claude`
+and `/resume`. `forge import` on the machine the project left takes it back. Both are a person's commands: the hook
+refuses them from Claude (`[move:person]`).
+
+**A Linux server** (Debian, Ubuntu) runs the forge too: the CLI and hooks are plain Node, and the test suite runs
+in a Linux container, but the kit is made on and for macOS (decision 3), so run `forge doctor` first. There:
+- Install Node 22 or later (Debian's own is older: NodeSource), Docker Engine with your user in the `docker`
+  group, `glab`, `gitleaks`, `jq` and `tmux`. `claude` prints a sign-in link to open on another computer.
+- Start the lead inside `tmux new -s acme`, so it keeps running when you disconnect; `ssh <server> -t tmux attach
+  -t acme` brings you back to answer it.
+- The dashboard is not opened for you: `forge dashboard --watch --no-open`, then
+  `cd .forge/state && python3 -m http.server 8765 --bind 127.0.0.1` on the server, and on your computer
+  `ssh -N -L 8765:127.0.0.1:8765 <server>` and http://localhost:8765/dashboard.html. The app's ports from
+  `forge app up` are reached the same way.
+- A laptop used as the server: keep it on power, and make it ignore the lid (`HandleLidSwitch=ignore` in
+  `/etc/systemd/logind.conf`) and never sleep (`sudo systemctl mask sleep.target suspend.target`).
 
 ---
 

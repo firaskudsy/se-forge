@@ -14,6 +14,7 @@ import { projectSteps, stepTimes } from './steps.mjs';
 import { renderSteps } from './steps-view.mjs';
 import { finish, finishText } from './finish.mjs';
 import { onHold, renderHold } from './hold.mjs';
+import { everyText } from './watch.mjs';
 import { ticketUsage, ticketLimits, reached, teamPaths } from '../../policy/lib/limits.mjs';
 import { day, weekday, clock, when } from './format.mjs';
 import { duration } from '../timeline.mjs';
@@ -40,7 +41,7 @@ function byFamily(lines, prices, money) {
 // issues: what readIssues returned (the tracker's issues with their history; every one but the epics is a row of the
 // ticket table), or null. app: what appInfo found (the app's Compose file, services and code), or null.
 // architecture: what architectureModel gathered, or null.
-// watch: { every } (minutes) when forge dashboard --watch rebuilds the page, which then reloads itself.
+// watch: { every } (milliseconds) when forge dashboard --watch looks for changes and rebuilds the page, which then reloads itself.
 // limits: the project's per-ticket limits (policy.limits, decision 127); each open ticket gets what it used of them.
 // tracker: gitlab or github, for each ticket's link to its issue. repos: a system's member repositories (projectData).
 // stack: the project's stack in its own words, which tells the stack guides it uses from the ones it does not (decision 137).
@@ -423,7 +424,7 @@ footer{color:var(--dim);font-size:12px}footer p{margin:4px 0}
 .hold{border-top:1px solid var(--line);padding:12px 0 6px;scroll-margin-top:56px}.hold h3{font-size:15px;margin:0 0 2px}.hold h3 a{color:var(--agents)}.hold .dim{margin:2px 0}.hold-s{margin:6px 0;color:var(--waiting)}.hold-r{margin:10px 0 2px;font-weight:600}.hold .md{max-width:920px}
 .status{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:999px;padding:4px 12px;margin:0 0 10px;font-weight:600}.status i{width:9px;height:9px;border-radius:50%;background:var(--idle)}.status.up i{background:var(--i-closed)}.status.down i{background:var(--dim)}
 </style></head><body><main>
-<header class="top"><div><h1>${esc(project)}</h1><p class="sub">${m.since > 0 ? `Last ${Math.round((m.now - m.since) / (24 * H))} days` : 'Whole project'} · built ${esc(when(m.now))} · ${m.table.length} tickets${kitText(m.kit) ? ` · ${esc(kitText(m.kit))}` : ''}${m.watch ? ` · <span id="watch">watching: a new page every ${m.watch.every} min, and this one reloads itself</span>` : ''}</p></div>${repoNav(m.repoLinks)}</header>
+<header class="top"><div><h1>${esc(project)}</h1><p class="sub">${m.since > 0 ? `Last ${Math.round((m.now - m.since) / (24 * H))} days` : 'Whole project'} · built ${esc(when(m.now))} · ${m.table.length} tickets${kitText(m.kit) ? ` · ${esc(kitText(m.kit))}` : ''}${m.watch ? ` · <span id="watch">watching: a look every ${everyText(m.watch.every)}, and this page reloads itself when something changed</span>` : ''}</p></div>${repoNav(m.repoLinks)}</header>
 <div class="kpis">${kpis.map(([k, v, more, hint]) => `<div class="kpi"${hint && more ? ` title="${esc(hint)}"` : ''}><span>${esc(k)}</span><b>${esc(v)}</b>${more ? `<small>${esc(more)}</small>` : ''}</div>`).join('')}</div>
 ${renderSteps(m.steps)}
 <nav class="tabs" role="tablist" aria-label="Dashboard sections">${TABS.map(([id, l], i) => `<button type="button" role="tab" id="tab-btn-${id}" aria-controls="tab-${id}" aria-selected="${i === 0}" data-tab="${id}">${esc(l)}${id === 'screens' && m.shots.length ? `<span class="count">${m.shots.length}</span>` : ''}${id === 'hold' && m.hold.length ? `<span class="count">${m.hold.length}</span>` : ''}</button>`).join('')}</nav>
@@ -555,7 +556,7 @@ document.querySelectorAll('.tickets > thead th').forEach(function (th) {
 }
 
 // The stamp forge dashboard --watch writes next to the page after each build: the build's time. The page loads it
-// every 10 seconds (a script tag, which a page opened from a file may load from its own folder) and reloads itself
+// every 5 seconds (a script tag, which a page opened from a file may load from its own folder) and reloads itself
 // for a newer one, keeping its tab (the address), its open sections and where it was scrolled to. Once per stamp:
 // an older copy of the page never reloads in a loop. When the watch stops, the stamp goes and the page says so.
 export const stampFile = (out) => `${out.replace(/\.html?$/i, '')}.stamp.js`;
@@ -588,7 +589,7 @@ function watchScript(m) {
     s.onload = function () { s.remove(); };
     s.onerror = function () { s.remove(); clearInterval(timer); if (note) note.textContent = 'no longer watched: forge dashboard --watch starts it again'; };
     document.head.appendChild(s);
-  }, 10000);
+  }, 5000);
 })();
 </script>`;
 }

@@ -67,6 +67,19 @@ forge doctor
 claude
 ```
 
+**Moving a project to another machine** (decision 151; GUIDE.md, part I): on the old one, `/pause` in the lead's
+session until "Safe to close", then
+```
+forge export --check                             # ready? what it would carry
+forge export                                     # ~/demo-app-forge-<date>-<time>.tgz, and the steps for the new one
+```
+On the new one: steps 1 to 3, then
+```
+scp <old machine>:~/demo-app-forge-*.tgz ~
+cd ~/code && git clone git@git.lightring.dev:ai/demo-app.git && cd demo-app
+forge import ~/demo-app-forge-*.tgz              # then its "Your turn" steps, and claude, /resume
+```
+
 ## A project
 | You want to | Run |
 |---|---|
@@ -98,6 +111,7 @@ claude
 | Stop for the day, close the laptop, or go offline | `/pause` until it says "Safe to close"; `/resume` in a fresh session later |
 | See what the agents left behind | `forge worktrees` (`--clean` removes the finished ones) |
 | Answer the kit | Every question comes as choices: pick in the session, or reply like `1A 2B 3[31]` to a written list; your own words always work too. What only you can do comes last as **Your turn**: steps in order, each with where, the command to paste and how you know it worked; do them, then reply `done`. What you answered before, the owner-assistant answers for you; the progress report lists it under "Decided for you" to change |
+| Approve a gated plan or a package | `! forge approve 12` in the lead's session (a plan with `Gates: security` or `architecture`); `! forge approve 12 --package nodemailer` for a package the register did not approve. Only you can run it; the On hold tab has the line to copy |
 | Answer a ticket on hold | In the build a ticket waits 10 minutes for your answer (`policy.hold.minutes`), then goes on hold and the lead takes another. The dashboard's **On hold** tab has its questions and the reply to paste in the lead's session: `#12 Q1 b, Q2 a` |
 | A ticket parked at its limit | `forge limits` shows each open ticket's lanes, review rounds with blockers and QA fails (4, 2, 2 by default); `forge limits lift 12` gives it one more allowance (a person only) |
 

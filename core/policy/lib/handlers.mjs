@@ -32,6 +32,13 @@ const READ_ONLY_CMDS = new Set(['ls', 'cat', 'head', 'tail', 'grep', 'rg', 'wc',
 
 // A plan named in a spawn prompt, with its Branch: and Gates: header lines.
 const PLAN_REF = /(?:^|[\s"'`(])((?:[\w./~-]*\/)?plans\/[\w.-]+\.md)\b/;
+// The asks a lane turns into a question for the lead instead of a prompt (decision 149), with what it does instead.
+const PACKAGE = 'use only approved packages (policy.deps.approved), or stop here and put it in your report as a question for the owner (the package, why, and what you would use instead)';
+const LANE_QUESTIONS = new Map([
+  ['deps:change', PACKAGE],
+  ['deps:image', PACKAGE],
+  ['net:outside', 'work without it, or stop here and put it in your report as a question for the owner (the address and why; they can add the host to policy.network.allowHosts)'],
+]);
 const SECURITY = /security|auth|permission|payment|pii|personal/i;
 const ARCHITECTURE = /architecture|stack/i;
 
@@ -107,9 +114,9 @@ function spawnFindings(input, ctx) {
   if (!plan) return out;
   const names = gateNames(plan.gates);
   if (!/^none$/i.test(plan.gates) && SECURITY.test(names) && !isApproved(ctx, 'security', plan.branch)) {
-    out.push(ask('gate:security', `Plan ${path.basename(plan.file)} is tagged "${plan.gates}". A human approves before a lane implements it on ${plan.branch ?? 'its branch'}.`, { gate: 'security', record: true, branch: plan.branch }));
+    out.push(ask('gate:security', `Plan ${path.basename(plan.file)} is tagged "${plan.gates}". A human approves before a lane implements it on ${plan.branch ?? 'its branch'}: ask the owner in writing and hold the ticket; they approve with ! forge approve <ticket> (decision 149).`, { gate: 'security', record: true, branch: plan.branch }));
   }
-  if (ARCHITECTURE.test(names)) out.push(ask('gate:architecture', `Plan ${path.basename(plan.file)} changes the architecture or stack ("${plan.gates}"). A human approves it.`, { gate: 'architecture' }));
+  if (ARCHITECTURE.test(names) && !isApproved(ctx, 'architecture', plan.branch)) out.push(ask('gate:architecture', `Plan ${path.basename(plan.file)} changes the architecture or stack ("${plan.gates}"). A human approves it: ask the owner in writing and hold the ticket; they approve with ! forge approve <ticket> (decision 149).`, { gate: 'architecture', record: true, branch: plan.branch }));
   out.push(...contractFindings(plan, type, lane.at));
   return out;
 }
@@ -221,6 +228,12 @@ function decide(input, ctx) {
   }
   if (input.tool_name === 'Bash' && !findings.some((f) => f.decision === 'deny')) findings.push(...commitScan(input, ctx));
   let result = combine(findings);
+  // A lane never waits on a person for a package or an outside address (decision 149): it is refused with what to do,
+  // the lead asks the owner in writing and holds the ticket, and the owner's ! forge approve <ticket> --package <name>
+  // approves a package.
+  if (result.decision === 'ask' && ctx.agentId && result.findings.every((f) => LANE_QUESTIONS.has(f.rule))) {
+    result = { decision: 'deny', findings: result.findings.map((f) => ({ ...f, reason: `${f.reason} A lane does not wait for the owner (decision 149): ${LANE_QUESTIONS.get(f.rule)}; the lead asks them and holds the ticket.` })) };
+  }
   if (result.decision === 'ask' && !HUMAN_MODES.has(ctx.permissionMode)) {
     result = { decision: 'deny', findings: result.findings.map((f) => ({ ...f, reason: `${f.reason} This needs a human approval, which cannot be given in ${ctx.permissionMode} mode.` })) };
   }
@@ -334,6 +347,9 @@ export function sessionStart(input, env) {
   if (['clear', 'compact', 'resume'].includes(input.source)) head.unshift(`RESUME (${input.source}): read the newest handover, check git status and the branch, then carry on from "Remaining".`);
   const changed = kitChange(ctx);
   if (changed) head.unshift(changed);
+  // A checkout whose project moved to another machine (forge export, decision 151) starts nothing.
+  const moved = path.join(ctx.mainRoot, '.forge', 'state', 'exported.json');
+  if (fs.existsSync(moved)) head.unshift(`MOVED: this project was exported on ${(/"at":\s*"([^"]{16})/.exec(fs.readFileSync(moved, 'utf8'))?.[1] ?? 'an earlier date').replace('T', ' ')} UTC (forge export) and runs on another machine now. Start nothing here: no agent, ticket or merge. Tell the owner; forge import <file> brings it back.`);
   // The main session also gets the lead's own rules: how it asks the owner (decision 136). Lanes never do.
   const text = [head.join('\n'), readKitFile('core/AGENTS.md').trim(), readKitFile('core/LEAD.md').trim(), projectRules(ctx), projectFacts(ctx)].filter(Boolean).join('\n\n');
   return { hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: text } };

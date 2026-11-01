@@ -8,6 +8,41 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ## [Unreleased]
 
+### Fixed
+- **Agents waited on permission prompts for packages already approved.** The kit's Claude Code settings asked for every
+  `npm install`, `pnpm add`, `pip install` and the like, whatever `policy.deps.approved` said, and a prompt stops the
+  agent before the lead can put anything on hold. Those asks are gone from the settings (`forge sync` drops them);
+  the policy hook decides, and now explicitly allows an install of approved packages (decision 149).
+- **A gated plan prompted at every lane's spawn**, even after the owner said yes in writing (decision 147 claimed
+  otherwise): the architecture gate was asked again for each engineer, and neither gate could be approved without a
+  prompt. Both are now approved once per branch, with `forge approve`.
+- **Downloading the project's Figma pictures prompted every time**: the Figma plugin's tools hand back pictures as
+  links on www.figma.com, which no project's network allowlist named. On budget-guru these were all 17 network prompts,
+  and two of them held its #15 UI lane for 28 and 12 hours. When the project names a Figma file, a download of those
+  links (and nothing else, sending no data) is now allowed without a prompt (decision 149).
+
+### Added
+- **`forge approve <ticket> [--package <name>]`** (decision 149), the owner's alone (the hook refuses it from Claude):
+  it records the approval of the ticket's plan for its branch, for each gate it names (security, architecture), so
+  its lanes start and edit gated files without a prompt; and it adds the packages named to `policy.deps.approved`.
+  `forge wait-owner` returns as soon as it runs. The On hold tab shows the line to copy.
+- A lane refused a package or image that is not approved, or an address outside `policy.network.allowHosts`, no
+  longer prompts: it reports it as a question, which the lead asks the owner in writing and holds the ticket until
+  they answer.
+
+- **`forge export` and `forge import <file>`** (decision 151) move a project's work to another machine. Export checks
+  it is paused, saved and pushed (`--check` only reports), writes the lead's handover and `.forge/state` (the
+  dashboard's history, the gates approved, each ticket's lanes) to one file with no key and no `.env`, and marks the
+  checkout as moved so its lead starts nothing. Import, in a clone on the other machine, runs `forge init`, puts them
+  back and lists the owner's steps (the model server's key, `.env`, `/resume`). Both are a person's: the hook refuses
+  them from Claude. GUIDE.md part I covers a Linux server.
+
+### Changed
+- **`forge dashboard --watch` looks every 30 seconds, not every 5 minutes** (decision 150). It builds a new page only
+  when something the page reads changed (the timeline, the plans and reviews, the branches), so the open page reloads
+  only then; it reads the tracker at most every 5 minutes and builds at least every 5. `--every` takes `30s` or `2m`
+  (a bare number is still minutes), 10 seconds or more. The open page looks for a new build every 5 seconds, not 10.
+
 ## [0.2.47] - 2026-10-30
 
 ### Added

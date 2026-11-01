@@ -77,6 +77,20 @@ export function checkForgeLimits(c, a0) {
   return [deny('limits:lift', 'Only a person lifts a ticket\'s limit (decision 127): park the ticket and tell the owner. The owner runs forge limits lift <ticket> in a terminal, or types ! forge limits lift <ticket> in this session.')];
 }
 
+// forge approve (decision 149) is a person's: approving a gated plan or a package is the owner's decision, never an
+// agent's or the lead's.
+export function checkForgeApprove(c, a0) {
+  if (a0 !== 'forge' || c.argv[1] !== 'approve') return [];
+  return [deny('approve:person', 'Only a person approves a gated plan or a package (decision 149): ask the owner in writing and hold the ticket. The owner types ! forge approve <ticket> [--package <name>] in this session, or runs it in a terminal.')];
+}
+
+// forge export and forge import (decision 151) are a person's: moving a project's work, and bringing in its approvals
+// and history from a file, is the owner's call.
+export function checkForgeMove(c, a0) {
+  if (a0 !== 'forge' || !['export', 'import'].includes(c.argv[1])) return [];
+  return [deny('move:person', `Only a person moves a project to another machine (decision 151). Tell the owner: after /pause and "Safe to close", they run forge ${c.argv[1]} in a terminal, or ! forge ${c.argv[1]} in this session.`)];
+}
+
 // forge llm add, use and remove (decision 140) are a person's: which server the agents run on, and with whose key, is
 // the owner's choice. The list (forge llm) is anyone's; it names where keys are, never a key.
 export function checkForgeLlm(c, a0) {

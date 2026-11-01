@@ -28,13 +28,6 @@
       "Bash(forge dashboard --text*)"
     ],
     "ask": [
-      "Bash(npm install *)",
-      "Bash(npm i *)",
-      "Bash(pnpm add *)",
-      "Bash(yarn add *)",
-      "Bash(pip install *)",
-      "Bash(uv add *)",
-      "Bash(dotnet add *)",
       "Bash(ssh *)",
       "Bash(scp *)",
       "Bash(rsync *)",

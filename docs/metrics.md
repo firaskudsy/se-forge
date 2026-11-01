@@ -153,7 +153,7 @@ forge dashboard --days 14       the last 14 days
 forge dashboard --ticket 11,12  some tickets
 forge dashboard --out ~/Desktop/acme.html --no-open
 forge dashboard --text          the same numbers as text, nothing written (the lead's progress report)
-forge dashboard --watch         a new page every 5 minutes (--every <minutes>) until Ctrl+C; the open page reloads itself
+forge dashboard --watch         a look every 30 seconds (--every 30s|2m), a new page when something changed; the open page reloads itself
 ```
 One page on this Mac (`.forge/state/dashboard.html`, never committed), with `dashboard.csv` next to it. It
 joins the timeline with the bootstrap's stories and tickets, the plans, `metrics.md`, the review rounds in the
@@ -162,10 +162,13 @@ team repo's history and the merges into `dev`; the one server it calls is the tr
 `project.prices` is set, tokens until then. The KPIs stay on top; the charts, the app's screenshots and the table
 are in ten tabs, and the page remembers the open tab in its address (`dashboard.html#cost`).
 
-The page is a snapshot of the moment it was built (the line under the title says when). With `--watch` (decision
-126) forge makes a new one every few minutes and writes a small stamp next to it (`dashboard.stamp.js`, the build's
-time); the open page loads the stamp every 10 seconds and reloads itself when it is newer, keeping its tab, its open
-sections and where it was scrolled to. Ctrl+C removes the stamp, and the open page says it is no longer watched.
+The page is a snapshot of the moment it was built (the line under the title says when). With `--watch` (decisions
+126 and 150) forge looks every 30 seconds whether anything the page reads changed (the timeline, the state files,
+the project's folder in the team repo, the branches), and only then makes a new page and writes a small stamp next to
+it (`dashboard.stamp.js`, the build's time). It reads the tracker at most every 5 minutes, and makes a page at least
+every 5 minutes so its times stay current. The open page loads the stamp every 5 seconds and reloads itself when it
+is newer, keeping its tab, its open sections and where it was scrolled to. Ctrl+C removes the stamp, and the open
+page says it is no longer watched.
 
 **Working time**, a KPI next to "Waiting for you", is the AI at work over the whole project: agents, gates and the
 lead's turns, each moment once (chart 1's top lane, added up). It leaves out the waits for you and every stretch of
@@ -291,7 +294,8 @@ The diagrams are drawn with mermaid-cli in Docker when the page is built, all ne
 for the owner or blocked (decisions 127, 139), or the board's status is On hold or Blocked. For each: what it waits
 for (your answer, its limit, another ticket), when it was asked, the questions its status names as its plan's section 6
 writes them, the reply to paste in the lead's session with each question's recommended answer filled in (`#12 Q1 b,
-Q2 a`; a `?` where the plan recommends none), or `! forge limits lift 12` for one at its limit, and the tickets
+Q2 a`; a `?` where the plan recommends none), `! forge approve 12` for an approval (a gated plan, or `--package
+<names>` for the packages its status names, decision 149), or `! forge limits lift 12` for one at its limit, and the tickets
 waiting behind it (their `Depends on:` names it, or they are blocked on it). The tab shows how many. `forge dashboard
 --text` prints the same as its `On hold:` line.
 

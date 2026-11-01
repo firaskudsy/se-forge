@@ -50,9 +50,12 @@ export function onHold({ every = [], drafts = [], catalogue = [] }) {
       ...drafts.filter((d) => draft && d.deps?.includes(draft)).map((d) => (numOf.has(d.t) ? `#${numOf.get(d.t)}` : d.t)),
       ...every.filter((x) => !x.mergedAt && new RegExp(`\\bblocked on #${t.num}\\b`, 'i').test(x.status || '')).map((x) => x.id),
     ];
+    // An approval the owner gives with forge approve (decision 149): a gated plan, or the packages its status names.
+    const pkgs = /\bpackages?\b:?\s*([@\w./-]+(?:\s*,\s*[@\w./-]+)*)/i.exec(own)?.[1]?.split(/\s*,\s*/) ?? [];
+    const approve = kind === 'owner' && (/\bapprov/i.test(own) || pkgs.length) ? `! forge approve ${t.num}${pkgs.length ? ` --package ${pkgs.join(',')}` : ''}` : null;
     const reply = kind === 'limit' ? `! forge limits lift ${t.num}`
-      : kind === 'owner' ? `#${t.num} ${q.ids.length ? q.ids.map((id) => `${id} ${q.blocks.find((b) => b.id === id)?.pick ?? '?'}`).join(', ') : '<your answer>'}` : null;
-    return { num: t.num, id: t.id, title: t.title, status, since: /\(asked ([^)]+)\)/i.exec(status)?.[1] ?? null, kind, on: on ? Number(on) : null, plan: t.plan ?? null, questions: q.blocks, reply, behind: [...new Set(behind)] };
+      : kind === 'owner' && (q.ids.length || !approve) ? `#${t.num} ${q.ids.length ? q.ids.map((id) => `${id} ${q.blocks.find((b) => b.id === id)?.pick ?? '?'}`).join(', ') : '<your answer>'}` : null;
+    return { num: t.num, id: t.id, title: t.title, status, since: /\(asked ([^)]+)\)/i.exec(status)?.[1] ?? null, kind, on: on ? Number(on) : null, plan: t.plan ?? null, questions: q.blocks, reply, approve, behind: [...new Set(behind)] };
   }).sort((a, b) => a.num - b.num);
 }
 
@@ -64,7 +67,8 @@ export function renderHold(list, { link = () => null, cmd }) {
     const href = link(h.num);
     const name = `${href ? `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(h.id)}</a>` : esc(h.id)}${h.title ? ` ${esc(h.title)}` : ''}`;
     const qs = h.questions.length ? `<div class="md">${renderMarkdown(h.questions.map((b) => b.text).join('\n\n'))}</div>` : h.kind === 'owner' ? `<p class="dim">The questions are in ${esc(h.plan ? `plans/${h.plan}` : 'its plan')}, section 6.</p>` : '';
-    const reply = h.reply ? `<p class="hold-r">${h.kind === 'limit' ? 'To give it one more allowance, in the lead\'s session:' : 'Your reply, to paste in the lead\'s session:'}</p>${cmd(h.reply)}` : '';
+    const reply = (h.reply ? `<p class="hold-r">${h.kind === 'limit' ? 'To give it one more allowance, in the lead\'s session:' : 'Your reply, to paste in the lead\'s session:'}</p>${cmd(h.reply)}` : '')
+      + (h.approve ? `<p class="hold-r">To approve it, in the lead's session:</p>${cmd(h.approve)}` : '');
     const behind = h.behind.length ? `<p class="dim">Waiting behind it: ${esc(h.behind.join(', '))}.</p>` : '';
     return `<article class="hold" id="hold-${h.num}"><h3>${name}</h3><p class="dim">${esc(WHAT[h.kind])}${h.since ? ` · asked ${esc(h.since)}` : ''}</p><p class="hold-s">${esc(h.status)}</p>${qs}${reply}${behind}</article>`;
   };
@@ -74,5 +78,5 @@ export function renderHold(list, { link = () => null, cmd }) {
 // "#12 waits for your answer (Q4, Q6, asked 30 Oct 10:12) · #15 parked at its limit": forge dashboard --text.
 export function holdText(list) {
   if (!list.length) return null;
-  return `On hold: ${list.map((h) => `${h.id} ${h.kind === 'owner' ? `waits for your answer${h.questions.length || h.since ? ` (${[h.questions.map((b) => b.id).join(', '), h.since ? `asked ${h.since}` : ''].filter(Boolean).join(', ')})` : ''}` : h.kind === 'limit' ? 'is parked at its limit' : h.kind === 'ticket' ? `waits for #${h.on}` : 'is on hold on the board'}${h.behind.length ? `, ${h.behind.length} behind it` : ''}`).join(' · ')}.`;
+  return `On hold: ${list.map((h) => `${h.id} ${h.kind === 'owner' ? `waits for your ${h.approve && !h.questions.length ? 'approval' : 'answer'}${h.questions.length || h.since ? ` (${[h.questions.map((b) => b.id).join(', '), h.since ? `asked ${h.since}` : ''].filter(Boolean).join(', ')})` : ''}` : h.kind === 'limit' ? 'is parked at its limit' : h.kind === 'ticket' ? `waits for #${h.on}` : 'is on hold on the board'}${h.behind.length ? `, ${h.behind.length} behind it` : ''}`).join(' · ')}.`;
 }

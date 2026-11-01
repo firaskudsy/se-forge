@@ -23,7 +23,7 @@
 //   forge timeline [<ticket>] [--days <n>] [--json | --csv]   where the time went: waits for you, agents, gates,
 //                                         refusals and failures, from the hooks' log (.forge/state/timeline-*.jsonl)
 //   forge timeline import                 the history before the hooks' log, from Claude Code's session logs
-//   forge dashboard [--days <n>] [--ticket 11,12] [--out <file>] [--no-open] [--offline] [--watch [--every <min>]]   charts in tabs and a ticket table
+//   forge dashboard [--days <n>] [--ticket 11,12] [--out <file>] [--no-open] [--offline] [--watch [--every <30s|2m>]]   charts in tabs and a ticket table
 //                                         in one local page (.forge/state/dashboard.html), with a CSV next to it;
 //                                         --text prints its numbers instead and writes nothing (the lead's report)
 //   forge shot <image> "<what>" [--ticket <n>]   keep a picture of the app for the dashboard (team repo, shots/)
@@ -34,6 +34,12 @@
 //                                         open it; up builds, starts, waits until healthy and opens it; down stops it
 //   forge limits [lift <ticket>]          each open ticket's use of its limits (decision 127); lift: a person gives a
 //                                         parked ticket one more allowance
+//   forge approve <ticket> [--package <n>] a person approves a gated plan and named packages (decision 149), so no lane
+//                                         waits on a prompt; the hook refuses it from Claude
+//   forge export [--check] [--out <file>] [--force]   move the project's work to another machine (decision 151): checks it is paused,
+//                                         saved and pushed, writes the handovers and state to one file, marks this
+//                                         checkout as moved; a person's (the hook refuses it from Claude)
+//   forge import <file> [--force]         on the other machine, in a clone of the app: links it and puts them back
 //   forge wait-owner <ticket>             in the build, the wait for the owner's answer on a ticket (decision 147): up to
 //                                         policy.hold.minutes, then the ticket goes on hold and the lead takes another
 //   forge system check [<system.json>]   a system's description (decision 130): its repositories, branches, deploys,
@@ -75,12 +81,15 @@ import { clock } from './dashboard/format.mjs';
 import { renderText } from './dashboard/text.mjs';
 import { readIssues } from './dashboard/issues.mjs';
 import { architectureModel } from './dashboard/architecture.mjs';
+import { parseEvery, everyText, inputsSignature, TRACKER } from './dashboard/watch.mjs';
 import { shot, ShotError, screensCheck } from './shot.mjs';
 import { app, appInfo, AppError } from './app.mjs';
 import { checkSystem, memberOf, memberSettings, systemOf } from '../policy/lib/system.mjs';
 import { lane, LaneError } from './lane.mjs';
 import { limits, LimitsError } from './limits.mjs';
 import { waitOwner, WaitError } from './wait.mjs';
+import { approve, ApproveError } from './approve.mjs';
+import { exportProject, importProject, MoveError } from './move.mjs';
 import { llm, llmFor, llmDoctor, llmLabel, LlmError } from './llm.mjs';
 import { llmInUse } from '../policy/lib/llm.mjs';
 import { record, clip } from '../policy/lib/timeline.mjs';
@@ -808,12 +817,12 @@ async function run(argv, env, cwd, out, failed) {
         const top = git(folder, ['rev-parse', '--show-toplevel']);
         if (!top.ok) throw new UsageError(`${folder} is not in a git repository (the team repo).`);
         const { config, project, kitVersion: pinned } = loadConfig(m, env);
-        const usage = 'forge dashboard [--text] [--days <n>] [--ticket 11,12] [--out <file>] [--no-open] [--offline] [--watch [--every <minutes>]]';
+        const usage = 'forge dashboard [--text] [--days <n>] [--ticket 11,12] [--out <file>] [--no-open] [--offline] [--watch [--every <30s|2m>]]';
         if (o.days !== undefined && !(Number(o.days) > 0)) throw new UsageError(usage);
         const watch = o.watch === true;
-        const every = o.every === undefined ? 5 : Number(o.every);
+        const every = parseEvery(o.every);
         if (watch && o.text === true) throw new UsageError(`--watch keeps the page current; --text prints once. ${usage}`);
-        if ((watch || o.every !== undefined) && !(every >= 1)) throw new UsageError(`--every takes minutes, 1 or more (with --watch). ${usage}`);
+        if ((watch || o.every !== undefined) && !every) throw new UsageError(`--every takes seconds (30s) or minutes (2m), 10 seconds or more (with --watch). ${usage}`);
         const only = typeof o.ticket === 'string' ? o.ticket.split(',').map((t) => Number(t.replace(/^#/, ''))).filter((n) => n > 0) : null;
         const file = typeof o.out === 'string' ? path.resolve(cwd, o.out) : path.join(m, '.forge', 'state', 'dashboard.html');
         // A system's workspace root covers every member repository (decision 130), and reads the system's board.
@@ -821,9 +830,9 @@ async function run(argv, env, cwd, out, failed) {
           const dir = path.join(m, r.path || r.name);
           return { name: r.name, dir, base: loadConfig(dir, env).config.branches.base, stateDir: path.join(dir, '.forge', 'state') };
         }).filter((r) => fs.existsSync(path.join(r.dir, '.git'))) : null;
-        const build = async () => {
+        const build = async ({ tracker = true } = {}) => {
           // The tracker's issues and their history (decision 122); --offline draws from the last read.
-          const issues = project.tracker ? await readIssues({ main: m, stateDir: path.join(m, '.forge', 'state'), tracker: project.tracker, board: project.board, env, offline: o.offline === true }) : null;
+          const issues = project.tracker ? await readIssues({ main: m, stateDir: path.join(m, '.forge', 'state'), tracker: project.tracker, board: project.board, env, offline: o.offline === true || !tracker }) : null;
           const model = dashboardModel({ main: m, folder, teamRoot: top.out, base: config.branches.base, stateDir: path.join(m, '.forge', 'state'), prices: project.prices, engineers: config.budget.engineers, days: o.days ? Number(o.days) : null, only, kit: { active: readVersion(path.join(m, '.forge', 'kit')), pinned, cli: kitVersion(), llm: llmLabel(path.join(m, '.forge', 'state'), readJson(userConfigFile(env), {})) }, issues, app: o.text === true ? null : appInfo(m, env),
             architecture: o.text === true ? null : architectureModel({ main: m, folder, base: config.branches.base, project, config, env, stateDir: path.join(m, '.forge', 'state') }), watch: watch ? { every } : null, limits: config.limits, tracker: project.tracker, repos,
             stack: [...Object.values(project.stack ?? {}), ...(systemOf(m)?.repos ?? []).map((r) => r.stack)].filter((v) => typeof v === 'string'), promote: config.branches.promote });
@@ -836,16 +845,31 @@ async function run(argv, env, cwd, out, failed) {
         out(`dashboard: ${first.html}\ntable: ${first.csv}\n${summary(first.model)}${first.model.lines.some((e) => e.source === 'import') ? '' : ' (forge timeline import adds the history before 0.2.6)'}`);
         if (o['no-open'] !== true && process.platform === 'darwin') spawnSync('open', [first.html], { stdio: 'ignore' });
         if (!watch) return 0;
-        // --watch (decision 126): a new page every few minutes until Ctrl+C; the open page reloads itself.
-        out(`watching: a new page every ${every} minute${every === 1 ? '' : 's'}; the open page reloads itself. Ctrl+C stops.`);
+        // --watch (decisions 126 and 150): a look every 30 seconds until Ctrl+C, a new page when anything it reads changed
+        // (and at least every 5 minutes), the tracker read at most every 5 minutes; the open page reloads itself.
+        out(`watching: a look every ${everyText(every)}, a new page when something changed (the tracker read every 5 min); the open page reloads itself. Ctrl+C stops.`);
+        const sources = { repos: [m, top.out, ...(repos ?? []).map((r) => r.dir)], stateDirs: [path.join(m, '.forge', 'state'), ...(repos ?? []).map((r) => r.stateDir)], folders: [folder], skip: [first.html, first.csv, first.stamp] };
+        let seen = inputsSignature(sources);
+        let builtAt = Date.now();
+        let readAt = Date.now();
         return await new Promise((resolve) => {
           let busy = false;
           const timer = setInterval(async () => {
             if (busy) return;
             busy = true;
-            try { out(`${clock(Date.now())} rebuilt: ${summary((await build()).model)}`); } catch (e) { out(`${clock(Date.now())} not rebuilt (${e.message}); trying again in ${every} minute${every === 1 ? '' : 's'}`); }
+            try {
+              const now = Date.now();
+              const tracker = now - readAt >= TRACKER;
+              if (tracker || now - builtAt >= TRACKER || inputsSignature(sources) !== seen) {
+                const x = await build({ tracker });
+                if (tracker) readAt = now;
+                builtAt = now;
+                seen = inputsSignature(sources);
+                out(`${clock(now)} rebuilt: ${summary(x.model)}`);
+              }
+            } catch (e) { out(`${clock(Date.now())} not rebuilt (${e.message}); trying again in ${everyText(every)}`); }
             busy = false;
-          }, Number(env.FORGE_WATCH_MS) || every * 60000);
+          }, Number(env.FORGE_WATCH_MS) || every);
           const stop = () => {
             clearInterval(timer);
             fs.rmSync(stampFile(file), { force: true });
@@ -866,6 +890,27 @@ async function run(argv, env, cwd, out, failed) {
         const { main: m } = checkout(cwd);
         const { config } = loadConfig(m, env);
         return limits(o, { main: m, folder: projectFolder(m), config, out });
+      }
+      case 'approve': {
+        const { main: m } = checkout(cwd);
+        return approve(o, { main: m, env, out });
+      }
+      case 'export': {
+        const { main: m, linked } = checkout(cwd);
+        if (linked) throw new UsageError(`Run forge export in the main checkout (${m}), not in a worktree.`);
+        const folder = projectFolder(m);
+        if (memberOf(m)?.repo === null) throw new UsageError('forge export moves one app\'s checkout; a system\'s workspace is not supported yet.');
+        const lines = [];
+        const ok = worktrees({}, m, (l) => lines.push(l)) === 0;
+        const machine = readJson(userConfigFile(env), {});
+        const name = readJson(path.join(m, '.forge', 'state', 'llm.json'), {}).server;
+        const server = name && machine.llm?.[name] ? { name, ...machine.llm[name] } : null;
+        return exportProject(o, { main: m, folder, env, out, settled: { ok, lines }, server, kitRepo: machine.kitRepo ?? null });
+      }
+      case 'import': {
+        const { main: m, linked } = checkout(cwd);
+        if (linked) throw new UsageError(`Run forge import in the main checkout (${m}), not in a worktree.`);
+        return await importProject(o, { main: m, env, out, init: (x) => init(x, env, m, out), teamRepo: () => teamRepo(env), machine: readJson(userConfigFile(env), {}) });
       }
       case 'wait-owner': {
         const { main: m } = checkout(cwd);
@@ -895,7 +940,7 @@ async function run(argv, env, cwd, out, failed) {
       }
     }
   } catch (e) {
-    if (e instanceof UsageError || e instanceof ApiError || e instanceof DesignError || e instanceof MergeError || e instanceof DocsError || e instanceof StarterError || e instanceof MetricsError || e instanceof ShotError || e instanceof AppError || e instanceof LimitsError || e instanceof WaitError || e instanceof LaneError || e instanceof LlmError) { process.stderr.write(`forge ${cmd}: ${e.message}\n`); failed(e.message); return 2; }
+    if (e instanceof UsageError || e instanceof ApiError || e instanceof DesignError || e instanceof MergeError || e instanceof DocsError || e instanceof StarterError || e instanceof MetricsError || e instanceof ShotError || e instanceof AppError || e instanceof LimitsError || e instanceof WaitError || e instanceof ApproveError || e instanceof MoveError || e instanceof LaneError || e instanceof LlmError) { process.stderr.write(`forge ${cmd}: ${e.message}\n`); failed(e.message); return 2; }
     throw e;
   }
 }

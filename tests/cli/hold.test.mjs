@@ -54,6 +54,21 @@ test('a status that names no questions: every question in section 6, and a ? whe
   assert.equal(none.reply, '#8 <your answer>');
 });
 
+test('an approval waits for forge approve: a gated plan, or the packages its status names (decision 149)', () => {
+  const list = onHold({ every: [
+    { num: 21, id: '#21', title: 'Sign-in', status: 'on hold: waiting for the owner: approval of the plan (Gates: security) (asked 2026-10-30 06:20)' },
+    { num: 22, id: '#22', title: 'Mail', status: 'on hold: waiting for the owner: package nodemailer, @aws-sdk/client-sesv2 (asked 2026-10-30 06:25)' },
+    { num: 23, id: '#23', title: 'Both', status: 'on hold: waiting for the owner: Q1 and approval of the plan (asked 2026-10-30)', questions: '- **Q1. Which?**\n  - **Default: (a).**' },
+  ] });
+  assert.deepEqual(list.map((h) => [h.reply, h.approve]), [
+    [null, '! forge approve 21'],
+    [null, '! forge approve 22 --package nodemailer,@aws-sdk/client-sesv2'],
+    ['#23 Q1 a', '! forge approve 23'],
+  ]);
+  assert.match(holdText(list), /^On hold: #21 waits for your approval \(asked 2026-10-30 06:20\) · #22 waits for your approval/);
+  assert.match(renderHold(list, { cmd: (c) => `<code>${c}</code>` }), /To approve it, in the lead's session:<\/p><code>! forge approve 21<\/code>/);
+});
+
 test('the On hold tab: each ticket with what it waits for, its questions and the reply to copy; or nothing on hold', () => {
   const cmd = (c) => `<div class="cmd"><code>${c}</code></div>`;
   const html = renderHold(onHold({ every, drafts, catalogue }), { link: (n) => `https://gitlab.example.com/g/p/-/issues/${n}`, cmd });

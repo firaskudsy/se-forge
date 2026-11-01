@@ -10,4 +10,4 @@ Pause the pipeline now (decision 95). Start nothing new: no agent, no ticket, no
    - `✗` unfinished: run the command it prints (`forge handover <name> --from-tree <path>`), so a fresh agent can continue from it. The worktree stays.
 4. **Lead handover.** Bring `.forge/handoffs/lead-handover.md` up to date (skill `handover`, Lead section): the tickets in progress with their branch and step, each worktree kept and its handover, the queue, and the exact next command.
 5. **Save.** `forge save -m "pause"`.
-6. **Confirm.** Run `forge worktrees`. Exit 0 and "Safe to close" mean done. Report in at most 5 lines: "Safe to close" (or what still blocks it), what was saved, and that `/resume` in a fresh session continues from the handover. Then end your turn.
+6. **Confirm.** Run `forge worktrees`. Exit 0 and "Safe to close" mean done. Report in at most 5 lines: "Safe to close" (or what still blocks it), what was saved, and that `/resume` in a fresh session continues from the handover. When the owner is moving the project to another machine, add that they now run `forge export` (decision 151). Then end your turn.

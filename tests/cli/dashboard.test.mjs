@@ -724,40 +724,60 @@ test('forge dashboard: the Run the app tab has the steps for this project, its a
   assert.match(html, /fetch\(url, \{ mode: 'no-cors'/);
 });
 
-test('forge dashboard --watch: a new page and stamp each round, the page reloads itself for a newer stamp, Ctrl+C removes the stamp (decision 126)', async () => {
+test('forge dashboard --watch: a look each round, a new page and stamp only when something changed, the page reloads itself for a newer stamp, Ctrl+C removes the stamp (decisions 126, 150)', async (t) => {
   const w = world();
   const out = path.join(w.base, 'out', 'dash.html');
   const stamp = path.join(w.base, 'out', 'dash.stamp.js');
+  const timeline = path.join(w.state, 'timeline-2026-10.jsonl');
   const { spawn } = await import('node:child_process');
-  const p = spawn('node', [FORGE, 'dashboard', '--watch', '--every', '1', '--offline', '--no-open', '--out', out], { cwd: w.client, env: { ...process.env, CLAUDECODE: '', FORGE_WATCH_MS: '400' } });
+  const p = spawn('node', [FORGE, 'dashboard', '--watch', '--offline', '--no-open', '--out', out], { cwd: w.client, env: { ...process.env, CLAUDECODE: '', FORGE_WATCH_MS: '300' } });
   let text = '';
   p.stdout.on('data', (d) => { text += d; });
   p.stderr.on('data', (d) => { text += d; });
-  const stamps = new Set();
-  for (let i = 0; i < 60 && stamps.size < 3; i++) {
-    await new Promise((r) => setTimeout(r, 150));
-    if (fs.existsSync(stamp)) stamps.add(fs.readFileSync(stamp, 'utf8'));
+  t.after(() => p.kill('SIGKILL'));
+  const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+  const read = () => (fs.existsSync(stamp) ? fs.readFileSync(stamp, 'utf8') : null);
+  for (let i = 0; i < 60 && !/Ctrl\+C stops/.test(text); i++) await pause(100);
+  const first = read();
+  assert.ok(first, text);
+  await pause(1200);
+  assert.equal(read(), first, 'four rounds with nothing changed: no new page, so the open page does not reload');
+  assert.doesNotMatch(text, /rebuilt:/);
+  const stamps = new Set([first]);
+  fs.mkdirSync(w.state, { recursive: true });
+  for (let k = 0; k < 2; k++) {
+    // An agent's step lands in the timeline: the next round builds a new page.
+    fs.appendFileSync(timeline, `${JSON.stringify({ at: at(70 + k), event: 'tool.start', who: 'backend-engineer', agent: 'b1', tool: 'Bash', what: 'npm test', ticket: '#11' })}\n`);
+    for (let i = 0; i < 40 && stamps.size < k + 2; i++) { await pause(100); stamps.add(read()); }
   }
-  assert.ok(stamps.size >= 3, `three builds, three stamps: ${[...stamps].join(' | ')}\n${text}`);
+  assert.equal(stamps.size, 3, `a new stamp for each change: ${[...stamps].join(' | ')}\n${text}`);
   const html = fs.readFileSync(out, 'utf8');
   const built = /var W = (\{[^}]+\})/.exec(html);
   assert.ok(built, 'the page carries its own build time and the stamp\'s name');
   const W = JSON.parse(built[1]);
   assert.equal(W.file, 'dash.stamp.js');
   assert.ok([...stamps].some((s) => s.includes(JSON.stringify(W.stamp))), 'the stamp names the page\'s build');
-  assert.match([...stamps][0], /^window\.forgeStamp && window\.forgeStamp\("\d{4}-\d\d-\d\dT[\d:.]+Z"\);\n$/);
-  assert.match(html, /<span id="watch">watching: a new page every 1 min, and this one reloads itself<\/span>/);
+  assert.match(first, /^window\.forgeStamp && window\.forgeStamp\("\d{4}-\d\d-\d\dT[\d:.]+Z"\);\n$/);
+  assert.match(html, /<span id="watch">watching: a look every 30 s, and this page reloads itself when something changed<\/span>/);
   assert.match(html, /if \(!\(s > W\.stamp\)\) return;/, 'only a newer stamp reloads the page');
+  assert.match(html, /\}, 5000\);/, 'the page looks for a new stamp every 5 seconds');
   p.kill('SIGINT');
   const code = await new Promise((r) => p.on('close', r));
   assert.equal(code, 0, text);
-  assert.match(text, /watching: a new page every 1 minute; the open page reloads itself\. Ctrl\+C stops\./);
-  assert.match(text, /\d+:\d\d [AP]M rebuilt: 2 tickets, 2 of 3 merged/);
+  assert.match(text, /watching: a look every 30 s, a new page when something changed \(the tracker read every 5 min\); the open page reloads itself\. Ctrl\+C stops\./);
+  assert.equal(text.match(/\d+:\d\d [AP]M rebuilt: \d+ tickets/g)?.length, 2, text);
   assert.match(text, /stopped watching; the page stays as it was last built/);
   assert.ok(!fs.existsSync(stamp), 'no stamp once stopped: the open page says it is no longer watched');
 });
 
-test('forge dashboard: no watch script without --watch; --watch with --text, or --every under a minute, is refused', () => {
+test('forge dashboard --watch --every: seconds or minutes, 10 seconds or more; a bare number is minutes', async () => {
+  const { parseEvery, everyText } = await import('../../core/cli/dashboard/watch.mjs');
+  assert.deepEqual(['30s', '45 sec', '2m', '2', '0.5', undefined].map(parseEvery), [30000, 45000, 120000, 120000, 30000, 30000]);
+  assert.deepEqual(['5s', '0', 'soon', '-1m'].map(parseEvery), [null, null, null, null]);
+  assert.deepEqual([30000, 60000, 120000, 90000].map(everyText), ['30 s', '1 min', '2 min', '90 s']);
+});
+
+test('forge dashboard: no watch script without --watch; --watch with --text, or --every under 10 seconds, is refused', () => {
   const w = world();
   const out = path.join(w.base, 'out', 'plain.html');
   const run = (...args) => spawnSync('node', [FORGE, 'dashboard', '--offline', '--no-open', ...args], { cwd: w.client, encoding: 'utf8', env: { ...process.env, CLAUDECODE: '' } });
@@ -767,9 +787,9 @@ test('forge dashboard: no watch script without --watch; --watch with --text, or 
   let r = run('--watch', '--text');
   assert.equal(r.status, 2);
   assert.match(r.stderr, /--watch keeps the page current; --text prints once/);
-  r = run('--watch', '--every', '0.5');
+  r = run('--watch', '--every', '5s');
   assert.equal(r.status, 2);
-  assert.match(r.stderr, /--every takes minutes, 1 or more/);
+  assert.match(r.stderr, /--every takes seconds \(30s\) or minutes \(2m\), 10 seconds or more/);
 });
 
 // Decision 137: when sub-agents ran and what each had to work from, from the timeline and the checkout's agent files.
