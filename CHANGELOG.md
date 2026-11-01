@@ -8,6 +8,8 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ## [Unreleased]
 
+## [0.2.49] - 2026-11-01
+
 ### Added
 - **`forge ui`** (decision 153): every command of `forge --help`, the project's tickets and what their agents do now,
   on one terminal screen with two panels and the function keys, for a terminal or a tmux pane (and over ssh, where
