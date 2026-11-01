@@ -8,6 +8,8 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ## [Unreleased]
 
+## [0.2.48] - 2026-11-01
+
 ### Fixed
 - **Agents waited on permission prompts for packages already approved.** The kit's Claude Code settings asked for every
   `npm install`, `pnpm add`, `pip install` and the like, whatever `policy.deps.approved` said, and a prompt stops the
