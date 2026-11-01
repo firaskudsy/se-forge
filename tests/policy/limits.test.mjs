@@ -1,5 +1,6 @@
-// The circuit breaker (decision 127): per ticket at most 4 engineer lanes, 2 review rounds with blockers and 2 QA
-// fails; past one the next engineer lane is refused until a person lifts it.
+// The circuit breaker (decisions 127 and 154): per ticket at most 3 repeat lanes (engineer lanes after the first of
+// their kind), 2 review rounds with blockers and 2 QA fails; past one the next engineer lane is refused until a person
+// lifts it.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -36,17 +37,20 @@ function pre(dir, tool_input, extra = {}) {
 const fix = { subagent_type: 'backend-engineer', description: 'Fix lane #12', prompt: 'Fix the blockers in .forge/project/reviews/12/code.md.' };
 const report = (verdict) => `# Code review (#12)\n\nVerdict: ${verdict}\nCommit: abc1234\n`;
 
-test('the fifth engineer lane of a ticket is refused; other tickets, reviewers and QA go on', () => {
+test('only repeat lanes count: the plan\'s DB, API and UI lanes are free, the fourth repeat is refused; other tickets, reviewers and QA go on', () => {
   const p = linked();
-  for (const [i, type] of ['db-engineer', 'backend-engineer', 'frontend-engineer'].entries()) p.lane(`a${i}`, type, '#12');
+  for (const [i, type] of ['db-engineer', 'backend-engineer', 'frontend-engineer', 'mobile-engineer', 'devops-engineer'].entries()) p.lane(`a${i}`, type, '#12');
   p.lane('q1', 'qa-engineer', '#12');
   p.lane('r1', 'code-reviewer', '#12');
   p.lane('o1', 'backend-engineer', '#13');
-  assert.equal(pre(p.dir, fix).decision, 'allow', '3 lanes so far: QA and reviewers do not count');
-  p.lane('a3', 'backend-engineer', '#12');
+  assert.equal(pre(p.dir, fix).decision, 'allow', 'five lanes, one of each kind: no repeat yet; QA and reviewers do not count');
+  p.lane('a5', 'backend-engineer', '#12');
+  p.lane('a6', 'frontend-engineer', '#12');
+  assert.equal(pre(p.dir, fix).decision, 'allow', 'two repeats (a second API lane, a second UI lane)');
+  p.lane('a7', 'backend-engineer', '#12');
   const r = pre(p.dir, fix);
   assert.equal(r.decision, 'deny');
-  assert.match(r.reason, /^\[ticket:limit\] #12 has reached its limit: 4 engineer lanes \(limit 4\)\. Park it: forge tracker status 12 Blocked --comment ".*Only a person lifts it, in a terminal: forge limits lift 12 \(decision 127\)\.$/);
+  assert.match(r.reason, /^\[ticket:limit\] #12 has reached its limit: 3 repeat lanes \(limit 3\)\. Park it: forge tracker status 12 Blocked --comment ".*Only a person lifts it, in a terminal: forge limits lift 12 \(decisions 127 and 154\)\.$/);
   assert.equal(pre(p.dir, { ...fix, description: 'API lane #13' }).decision, 'allow', 'another ticket');
   for (const t of ['code-reviewer', 'qa-engineer', 'security-reviewer']) assert.equal(pre(p.dir, { ...fix, subagent_type: t }).decision, 'allow', t);
 });
@@ -93,27 +97,31 @@ test('a person lifts a ticket\'s limit with forge limits lift; Claude cannot', (
   assert.notEqual(h.permissionDecision, 'deny', 'reading them is fine');
   const env = { ...process.env, CLAUDECODE: '' };
   let r = spawnSync('node', [FORGE, 'limits'], { cwd: p.dir, encoding: 'utf8', env });
-  assert.match(r.stdout, /^Limits per ticket \(policy\.limits\): 4 engineer lanes, 2 review rounds with blockers, 2 QA fails\./);
-  assert.match(r.stdout, /\n#12: lanes 4 of 4 · rounds with blockers 0 of 2 · QA fails 0 of 2 · at its limit: no more engineer lanes until a person lifts it \(forge limits lift 12\)\n/);
+  assert.match(r.stdout, /^Limits per ticket \(policy\.limits\): 3 repeat lanes \(an engineer lane after the first of its kind: a second API lane, a fix lane\), 2 review rounds with blockers, 2 QA fails\./);
+  assert.match(r.stdout, /\n#12: lanes 4 \(backend 4\) · repeats 3 of 3 · rounds with blockers 0 of 2 · QA fails 0 of 2 · at its limit: no more engineer lanes until a person lifts it \(forge limits lift 12\)\n/);
   r = spawnSync('node', [FORGE, 'limits', 'lift', '12'], { cwd: p.dir, encoding: 'utf8', env });
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /#12 has one more allowance: now 8 engineer lanes, 4 review rounds with blockers, 4 QA fails\./);
+  assert.match(r.stdout, /#12 has one more allowance: now 6 repeat lanes, 4 review rounds with blockers, 4 QA fails\./);
   assert.equal(pre(p.dir, fix).decision, 'allow', 'lifted');
-  for (let i = 4; i < 8; i++) p.lane(`a${i}`, 'backend-engineer', '#12');
+  for (let i = 4; i < 7; i++) p.lane(`a${i}`, 'backend-engineer', '#12');
   assert.equal(pre(p.dir, fix).decision, 'deny', 'one allowance, then a known worst case again');
   r = spawnSync('node', [FORGE, 'limits'], { cwd: p.dir, encoding: 'utf8', env });
-  assert.match(r.stdout, /#12: lanes 8 of 8 .* \(lifted 1×\)/);
+  assert.match(r.stdout, /#12: lanes 7 \(backend 7\) · repeats 6 of 6 .* \(lifted 1×\)/);
 });
 
 test('policy.limits: the defaults, a project\'s own numbers, and what is not a limit', async () => {
   const { loadConfig } = await import('../../core/policy/lib/config.mjs');
   const { writeProjectConfig } = await import('./helpers.mjs');
   const { dir } = makeRepo();
-  assert.deepEqual(loadConfig(dir, {}).config.limits, { lanes: 4, blockerRounds: 2, qaFails: 2 });
+  assert.deepEqual(loadConfig(dir, {}).config.limits, { repeats: 3, blockerRounds: 2, qaFails: 2 });
+  writeProjectConfig(dir, { policy: { ...DEFAULT_TEST_CONFIG, limits: { repeats: 5 } } });
+  assert.deepEqual(loadConfig(dir, {}).config.limits, { repeats: 5, blockerRounds: 2, qaFails: 2 });
+  // The key before decision 154 counted every lane: the same allowance for a one-area ticket.
   writeProjectConfig(dir, { policy: { ...DEFAULT_TEST_CONFIG, limits: { lanes: 6 } } });
-  assert.deepEqual(loadConfig(dir, {}).config.limits, { lanes: 6, blockerRounds: 2, qaFails: 2 });
-  writeProjectConfig(dir, { policy: { ...DEFAULT_TEST_CONFIG, limits: { lanes: 0, qaFails: 1.5 } } });
+  assert.deepEqual(loadConfig(dir, {}).config.limits, { repeats: 5, blockerRounds: 2, qaFails: 2 });
+  assert.deepEqual(loadConfig(dir, {}).errors, []);
+  writeProjectConfig(dir, { policy: { ...DEFAULT_TEST_CONFIG, limits: { repeats: 0, qaFails: 1.5 } } });
   const { errors } = loadConfig(dir, {});
-  assert.ok(errors.includes('policy.limits.lanes must be a whole number, 1 or more'), errors.join('; '));
+  assert.ok(errors.includes('policy.limits.repeats must be a whole number, 1 or more'), errors.join('; '));
   assert.ok(errors.includes('policy.limits.qaFails must be a whole number, 1 or more'));
 });

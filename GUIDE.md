@@ -62,7 +62,7 @@ flowchart TD
     E3 --> E4["Reviewers: code, security, API contract, and more as needed"]
     E4 --> E5["QA: the gates and the tests"]
     E4 -- "changes needed" --> E3
-    E3 -. "a limit reached: 4 engineer lanes, 2 review rounds with blockers or 2 QA fails" .-> L1["The ticket is parked, and the next one starts"]
+    E3 -. "a limit reached: 3 repeat lanes, 2 review rounds with blockers or 2 QA fails" .-> L1["The ticket is parked, and the next one starts"]
     L1 --> L2["You lift the limit (forge limits lift), or leave it parked"]
     L2 -. "lifted" .-> E3
     E4 -. "a finding outside the ticket: a follow-up issue" .-> FA
@@ -371,7 +371,7 @@ How a run behaves, so nothing surprises you:
 - **Auto mode is fine** (decision 141): routine steps run without a prompt, and what the kit needs a person for (a security plan, an architecture change, a new library) still asks you and counts as your approval. Only `dontAsk` and `bypassPermissions` refuse those, as nobody is asked there; in them the ticket stalls.
 - **Finished tickets close by themselves:** after the reviews and QA pass, `forge merge` merges the ticket into `dev` and moves it to **Done**, which closes the issue. Work with no branch of its own (only the team repo changed) closes once its reviews approve; without an approving review you're asked once in the terminal. You check the app when you merge `dev` into `staging` and `main`; if something doesn't work, tell the lead and it files a `[Bug]`.
 - **Follow-ups:** a reviewer's finding that is not a blocker is fixed in the same ticket when it is in that ticket's code. Anything else becomes a `[Follow-up]` issue. Once the build's own tickets are merged, the follow-ups the project manager rates P1 or P2 and the decision register covers join by themselves, in one round. The rest (P3, new scope, fixes to the kit itself) wait for you: the progress report lists them in one line, and only those you name in the session ("take #23 and #26") join. A follow-up's own review never files more follow-ups, so the build ends.
-- **Every ticket has limits** (decision 127): at most 4 engineer lanes, 2 review rounds with blockers and 2 QA fails. A ticket that reaches one is parked (Blocked, with the reason) and the agents go on with the next; the progress report tells you. `forge limits` shows what each open ticket has used. To let a parked ticket go on, run `forge limits lift 12` in a terminal (or `! forge limits lift 12` in the session): it gets one more allowance of each. Agents cannot lift a limit. A project changes the numbers in `project.json` (`policy.limits`).
+- **Every ticket has limits** (decisions 127 and 154): at most 3 repeat lanes, 2 review rounds with blockers and 2 QA fails. A repeat lane is an engineer lane after the first of its kind on the ticket (a second API lane, a fix lane after a review): the plan's one lane per area (DB, API, UI) is the ticket's work and never counts. A ticket that reaches one is parked (Blocked, with the reason) and the agents go on with the next; the progress report tells you. `forge limits` shows what each open ticket has used. To let a parked ticket go on, run `forge limits lift 12` in a terminal (or `! forge limits lift 12` in the session): it gets one more allowance of each. Agents cannot lift a limit. A project changes the numbers in `project.json` (`policy.limits`).
 - **Before each ticket** the project manager reads the board and tells you what needs a person. The planner then writes the plan with its estimate, answers what it can from the decision register, and decides the technical choices inside the ticket itself (listed in the plan as "Decided by the planner"). The `owner-assistant` then answers the questions you have already answered, or that the sources leave one way to answer, and you get only the rest, in one message (decision 138). It never answers a security or architecture question, a new library, scope, cost, or a product question you have not answered before. Every answer goes into `owner-answers.md` in the team repo, and the progress report lists what it answered for you under "Decided for you": tick one and you are asked it again, and that kind of question comes to you from then on.
 - **Models:** the engineers run on Sonnet (the `standard` tier); the planner, the architect, the analysts, the designer and the security reviewer on Opus (the `deep` tier). Asking for another model for an engineer is refused (`[models:tier]`); a project changes its tiers in `project.json` instead.
 - **Long runs:** the lead keeps going. When its conversation gets large it brings its handover up to date and Claude Code compacts the conversation; you never need `/clear`.
@@ -389,10 +389,12 @@ How a run behaves, so nothing surprises you:
 | Do one ticket with one agent | `claude`, then `/ticket 12` |
 | Let the agents work the queue | `claude`, then `/pipeline next 1` |
 | Work on an existing system of several repositories | part F: `forge system init`, then `claude` in the workspace (`~/code/<system>`) |
-| See or lift a ticket's limits | `forge limits` (each open ticket's lanes, review rounds and QA fails against its limits); `forge limits lift 12` lets a parked ticket go on |
+| See or lift a ticket's limits | `forge limits` (each open ticket's lanes by kind, and its repeat lanes, review rounds and QA fails against its limits); `forge limits lift 12` lets a parked ticket go on |
 | Report that something merged doesn't work | tell the lead in its session; it files a `[Bug]` naming the ticket, and the project manager triages it |
 | Close the laptop or go offline mid-work | type `/pause` and wait for "Safe to close"; later, in a fresh session, `/resume` |
 | Move a project's work to another machine | `/pause`, then `forge export` here and `forge import <file>` there (part I) |
+| See the tickets, what the agents do now, and run any command from one screen | `forge ui` in a terminal or a tmux pane beside the lead (part J) |
+| Remove a project from the team repo | `/pause` and close the lead, then `forge delete <slug>` in its checkout (part K) |
 | See what the agents left behind | `forge worktrees` (running, done or unfinished; `--clean` removes the done ones) |
 | See where a ticket's time and tokens went | `forge timeline 12`: waits for you, agents, gates, refusals, failures, tokens by model and by who, and the cost once prices are set; `--csv` for a spreadsheet (`docs/metrics.md`) |
 | See the whole project in charts | `forge dashboard` (part E) |
@@ -810,6 +812,59 @@ in a Linux container, but the kit is made on and for macOS (decision 3), so run 
   `forge app up` are reached the same way.
 - A laptop used as the server: keep it on power, and make it ignore the lid (`HandleLidSwitch=ignore` in
   `/etc/systemd/logind.conf`) and never sleep (`sudo systemctl mask sleep.target suspend.target`).
+- `forge ui` in a second tmux pane (`Ctrl+B %`) shows the tickets and what the agents do, over ssh, with no tunnel
+  (part J).
+
+---
+
+## J. Every command on one screen: `forge ui`
+
+`forge ui`, in the app's folder, opens one terminal screen in the style of the old two-panel file managers
+(decision 153): the project's tickets on the left (what needs you first, then what is being worked on, what is open,
+what nobody has started, what is merged), and on the right the selected ticket: where it is (Plan, Build, Review,
+Merge), what waits for you and the command that answers it, its limits, each agent it was given with its calls and
+edits, its time and tokens, and **Live**: what its agents do now, read again every 2 seconds. The first row is the
+whole project: the same numbers as `forge dashboard --text`.
+
+| Key | Does |
+|---|---|
+| ↑ ↓ PgUp PgDn, Enter | Move in the list; the ticket (or the project) on the right. Tab moves to the right panel, to scroll it |
+| F2 or `c` | **Commands**: every command of `forge --help`, in four groups: Look, Your decisions, Setup, The lead's tools. Enter opens its form; the form shows the exact command line it will run |
+| F3 `p`, F4 `o` | The selected ticket's plan; the lead's handover |
+| F5 `r` | Read everything again (it also does every 10 seconds) |
+| F6 `a`, F7 `l` | `forge approve <ticket>`, `forge limits lift <ticket>`, with the selected ticket filled in |
+| F8 `e`, F9 `d` | `forge export --check`; `forge dashboard` (over ssh it writes the page and says where) |
+| Esc | Stop a running command, close a dialog, back to the ticket |
+| F1 `h`, F10 `q` | Help; quit |
+
+A command runs as `forge` itself would in that folder, and its output comes on the right: `forge ui` adds no rights
+and takes none away. Your decisions (approve, lift, save, export, import, and the setup commands) ask y/N first;
+`forge delete` shows what would go and asks you to type the project's name. Outside a project, the Setup commands
+(`forge setup`, `forge init`, `forge import`) still work. It needs a terminal: Claude Code's `!` cannot run it, so
+use a terminal window, or a tmux pane beside the lead. The menu is made from `forge --help`, so a new command shows
+up in both.
+
+---
+
+## K. Deleting a project
+
+`forge delete <slug>` removes a project's folder from the team repo in one commit, which it pushes, and, run inside
+the project's checkout, unlinks that checkout (decision 152): the kit's files there go (`.forge/` with its handovers
+and the dashboard's history, the `.claude` files `forge sync` wrote, the kit's entries in
+`.claude/settings.local.json`, its git hooks and exclude lines). The app's code, branches and `.env` stay, and the
+app's repository on its host and its tracker issues are never touched.
+
+1. `/pause` in the lead's session until "Safe to close", then close it.
+2. `forge delete acme` says what would go and what stops it (agents still at work, worktrees left, changes in the
+   folder not saved, a team repo behind its remote), each with its fix. Nothing is changed.
+3. `forge delete acme --confirm acme` (typing the name is the confirmation) deletes it, and prints the line that
+   brings it back: `git -C <team repo> revert --no-edit <commit> && git -C <team repo> push`, then
+   `forge init --project acme` in the checkout. The checkout's own history (`.forge/state`) is not in git: run
+   `forge export` first if you might want it.
+
+A checkout on another machine keeps its link: after a `git pull` of the team repo there, `forge delete acme` in it
+unlinks it. Run outside any checkout, `forge delete` uses this machine's team repo (`forge setup`), or
+`--team-repo <path>`. Only a person deletes a project: the hook refuses it from Claude (`[delete:person]`).
 
 ---
 

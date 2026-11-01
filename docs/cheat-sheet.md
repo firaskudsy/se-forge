@@ -80,6 +80,18 @@ cd ~/code && git clone git@git.lightring.dev:ai/demo-app.git && cd demo-app
 forge import ~/demo-app-forge-*.tgz              # then its "Your turn" steps, and claude, /resume
 ```
 
+**Every command on one screen** (decision 153; GUIDE.md, part J): in a terminal or a tmux pane beside the lead,
+```
+cd ~/code/demo-app && forge ui                   # tickets left, the ticket and its agents live right
+```
+F2 every command (a form shows the exact line), F6 approve, F7 lift a limit, F3 the plan, Esc back, q quits.
+
+**Deleting a project** (decision 152; GUIDE.md, part K): `/pause` and close the lead, then in its checkout
+```
+forge delete demo-app                            # what would go, and what stops it
+forge delete demo-app --confirm demo-app         # gone from the team repo (pushed), this checkout unlinked
+```
+
 ## A project
 | You want to | Run |
 |---|---|

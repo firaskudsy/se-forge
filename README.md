@@ -91,7 +91,7 @@ flowchart TD
     E3 --> E4["Reviewers: code, security, API contract, and more as needed"]
     E4 --> E5["QA: the gates and the tests"]
     E4 -- "changes needed" --> E3
-    E3 -. "a limit reached: 4 engineer lanes, 2 review rounds with blockers or 2 QA fails" .-> L1["The ticket is parked, and the next one starts"]
+    E3 -. "a limit reached: 3 repeat lanes, 2 review rounds with blockers or 2 QA fails" .-> L1["The ticket is parked, and the next one starts"]
     L1 --> L2["You lift the limit (forge limits lift), or leave it parked"]
     L2 -. "lifted" .-> E3
     E4 -. "a finding outside the ticket: a follow-up issue" .-> FA
@@ -162,7 +162,7 @@ Details: `core/policy/README.md`.
 - **Records:** a decision register from discovery, C4 diagrams in Mermaid, MADR decision records, non-functional
   targets with their capacity math, k6 load tests where a plan has a performance gate.
 - **Commits:** Conventional Commits, no kit files, no secrets, the project's own checks (git hooks).
-- **Every ticket has limits** (the circuit breaker): 4 engineer lanes, 2 review rounds with blockers, 2 QA fails.
+- **Every ticket has limits** (the circuit breaker): 3 repeat lanes (an engineer lane after the first of its kind), 2 review rounds with blockers, 2 QA fails.
   At a limit the ticket is parked and the next one starts; only a person lifts it.
 
 ### Stacks
@@ -246,6 +246,8 @@ In a terminal (`forge help` for every option; one page for the team: [docs/cheat
 | `forge system check \| init`, `forge lane open \| close` | An existing system: its description, its workspace, an agent's worktree in a member repository |
 | `forge worktrees`, `forge handover <name>`, `forge pacing` | The agents' worktrees; a handover; the subscription's usage |
 | `forge export`, `forge import <file>` | Move a project's work to another machine: its handovers and state (GUIDE.md, I) |
+| `forge ui` | Every command, the tickets and what the agents do now, on one terminal screen (GUIDE.md, J) |
+| `forge delete <slug>` | Remove a project's folder from the team repo (pushed) and unlink this checkout (GUIDE.md, K) |
 | `forge llm [add \| use <name> \| remove]` | Run a checkout's agents on a self-hosted model server instead of Claude (GUIDE.md, H) |
 
 ## Measure and improve

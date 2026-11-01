@@ -34,12 +34,16 @@
 //                                         open it; up builds, starts, waits until healthy and opens it; down stops it
 //   forge limits [lift <ticket>]          each open ticket's use of its limits (decision 127); lift: a person gives a
 //                                         parked ticket one more allowance
-//   forge approve <ticket> [--package <n>] a person approves a gated plan and named packages (decision 149), so no lane
+//   forge approve <ticket> [--package <n>]
+//                                         a person approves a gated plan and named packages (decision 149), so no lane
 //                                         waits on a prompt; the hook refuses it from Claude
 //   forge export [--check] [--out <file>] [--force]   move the project's work to another machine (decision 151): checks it is paused,
 //                                         saved and pushed, writes the handovers and state to one file, marks this
 //                                         checkout as moved; a person's (the hook refuses it from Claude)
 //   forge import <file> [--force]         on the other machine, in a clone of the app: links it and puts them back
+//   forge delete <slug> [--confirm <slug>] [--force] [--team-repo <path>]   remove a project's folder from the team
+//                                         repo (one commit, pushed) and, inside its checkout, unlink it (decision 152);
+//                                         without --confirm it only says what would go; a person's
 //   forge wait-owner <ticket>             in the build, the wait for the owner's answer on a ticket (decision 147): up to
 //                                         policy.hold.minutes, then the ticket goes on hold and the lead takes another
 //   forge system check [<system.json>]   a system's description (decision 130): its repositories, branches, deploys,
@@ -55,13 +59,15 @@
 //                                         this machine knows; use: this checkout's agents run there from the next session
 //   forge worktrees [--clean]             the agents' worktrees: running, done or unfinished (exit 0 when safe to
 //                                         close); --clean removes the done ones, never anything unfinished
+//   forge ui                              every command, the tickets and what the agents do now, in one terminal
+//                                         screen (decision 153); for a person, in a terminal or a tmux pane
 //   forge version
 import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 import { loadConfig, leadCompactAt, TRACKERS, trackerEnv, openprojectEnv } from '../policy/lib/config.mjs';
 import { git, mainRootOf, makeContext } from '../policy/lib/context.mjs';
 import { KIT_ROOT, kitVersion } from '../policy/lib/kit.mjs';
@@ -90,6 +96,7 @@ import { limits, LimitsError } from './limits.mjs';
 import { waitOwner, WaitError } from './wait.mjs';
 import { approve, ApproveError } from './approve.mjs';
 import { exportProject, importProject, MoveError } from './move.mjs';
+import { deleteProject, linkTarget, DeleteError } from './delete.mjs';
 import { llm, llmFor, llmDoctor, llmLabel, LlmError } from './llm.mjs';
 import { llmInUse } from '../policy/lib/llm.mjs';
 import { record, clip } from '../policy/lib/timeline.mjs';
@@ -606,6 +613,34 @@ function save(o, cwd, out) {
   return 0;
 }
 
+// The dashboard's model (decisions 113 and 135), for its page, --text and forge ui. A system's workspace root covers
+// every member repository (decision 130) and reads the system's board; offline draws the tracker's issues (decision
+// 122) from the last read; text leaves out what only the page shows (the app, the architecture).
+async function dashboardData(m, env, { days = null, only = null, offline = false, text = false, watch = null } = {}) {
+  const folder = projectFolder(m);
+  const top = git(folder, ['rev-parse', '--show-toplevel']);
+  if (!top.ok) throw new UsageError(`${folder} is not in a git repository (the team repo).`);
+  const { config, project, kitVersion: pinned } = loadConfig(m, env);
+  const stateDir = path.join(m, '.forge', 'state');
+  const repos = memberOf(m)?.repo === null ? (systemOf(m)?.repos ?? []).map((r) => {
+    const dir = path.join(m, r.path || r.name);
+    return { name: r.name, dir, base: loadConfig(dir, env).config.branches.base, stateDir: path.join(dir, '.forge', 'state') };
+  }).filter((r) => fs.existsSync(path.join(r.dir, '.git'))) : null;
+  const issues = project.tracker ? await readIssues({ main: m, stateDir, tracker: project.tracker, board: project.board, env, offline }) : null;
+  const model = dashboardModel({ main: m, folder, teamRoot: top.out, base: config.branches.base, stateDir, prices: project.prices, engineers: config.budget.engineers, days, only, kit: { active: readVersion(path.join(m, '.forge', 'kit')), pinned, cli: kitVersion(), llm: llmLabel(stateDir, readJson(userConfigFile(env), {})) }, issues, app: text ? null : appInfo(m, env),
+    architecture: text ? null : architectureModel({ main: m, folder, base: config.branches.base, project, config, env, stateDir }), watch, limits: config.limits, tracker: project.tracker, repos,
+    stack: [...Object.values(project.stack ?? {}), ...(systemOf(m)?.repos ?? []).map((r) => r.stack)].filter((v) => typeof v === 'string'), promote: config.branches.promote });
+  return { model, project: project.name || path.basename(m), folder, top: top.out, repos };
+}
+
+// What forge ui shows (decision 153): the dashboard's model without the tracker's server (its last read) or what only
+// the page shows; throws in a folder that is not a set-up checkout.
+export async function uiData(cwd, env) {
+  const { main: m } = checkout(cwd);
+  const d = await dashboardData(m, env, { offline: true, text: true });
+  return { ...d, main: m, stateDir: path.join(m, '.forge', 'state') };
+}
+
 // The agents' worktrees (.claude/worktrees/, one per lane). Claude Code locks a lane's worktree while the
 // agent works, with "(pid N …)" in the reason: a live pid is a running agent; a dead one means the agent was
 // cut off (a sleep, a lost connection) and the lock is stale. Done means clean with every commit on the remote;
@@ -813,10 +848,6 @@ async function run(argv, env, cwd, out, failed) {
       }
       case 'dashboard': {
         const { main: m } = checkout(cwd);
-        const folder = projectFolder(m);
-        const top = git(folder, ['rev-parse', '--show-toplevel']);
-        if (!top.ok) throw new UsageError(`${folder} is not in a git repository (the team repo).`);
-        const { config, project, kitVersion: pinned } = loadConfig(m, env);
         const usage = 'forge dashboard [--text] [--days <n>] [--ticket 11,12] [--out <file>] [--no-open] [--offline] [--watch [--every <30s|2m>]]';
         if (o.days !== undefined && !(Number(o.days) > 0)) throw new UsageError(usage);
         const watch = o.watch === true;
@@ -825,22 +856,13 @@ async function run(argv, env, cwd, out, failed) {
         if ((watch || o.every !== undefined) && !every) throw new UsageError(`--every takes seconds (30s) or minutes (2m), 10 seconds or more (with --watch). ${usage}`);
         const only = typeof o.ticket === 'string' ? o.ticket.split(',').map((t) => Number(t.replace(/^#/, ''))).filter((n) => n > 0) : null;
         const file = typeof o.out === 'string' ? path.resolve(cwd, o.out) : path.join(m, '.forge', 'state', 'dashboard.html');
-        // A system's workspace root covers every member repository (decision 130), and reads the system's board.
-        const repos = memberOf(m)?.repo === null ? (systemOf(m)?.repos ?? []).map((r) => {
-          const dir = path.join(m, r.path || r.name);
-          return { name: r.name, dir, base: loadConfig(dir, env).config.branches.base, stateDir: path.join(dir, '.forge', 'state') };
-        }).filter((r) => fs.existsSync(path.join(r.dir, '.git'))) : null;
         const build = async ({ tracker = true } = {}) => {
-          // The tracker's issues and their history (decision 122); --offline draws from the last read.
-          const issues = project.tracker ? await readIssues({ main: m, stateDir: path.join(m, '.forge', 'state'), tracker: project.tracker, board: project.board, env, offline: o.offline === true || !tracker }) : null;
-          const model = dashboardModel({ main: m, folder, teamRoot: top.out, base: config.branches.base, stateDir: path.join(m, '.forge', 'state'), prices: project.prices, engineers: config.budget.engineers, days: o.days ? Number(o.days) : null, only, kit: { active: readVersion(path.join(m, '.forge', 'kit')), pinned, cli: kitVersion(), llm: llmLabel(path.join(m, '.forge', 'state'), readJson(userConfigFile(env), {})) }, issues, app: o.text === true ? null : appInfo(m, env),
-            architecture: o.text === true ? null : architectureModel({ main: m, folder, base: config.branches.base, project, config, env, stateDir: path.join(m, '.forge', 'state') }), watch: watch ? { every } : null, limits: config.limits, tracker: project.tracker, repos,
-            stack: [...Object.values(project.stack ?? {}), ...(systemOf(m)?.repos ?? []).map((r) => r.stack)].filter((v) => typeof v === 'string'), promote: config.branches.promote });
-          if (o.text === true) return { model };
-          return { model, ...writeDashboard(model, { project: project.name || path.basename(m), out: file }) };
+          const d = await dashboardData(m, env, { days: o.days ? Number(o.days) : null, only, offline: o.offline === true || !tracker, text: o.text === true, watch: watch ? { every } : null });
+          return o.text === true ? d : { ...d, ...writeDashboard(d.model, { project: d.project, out: file }) };
         };
         const first = await build();
-        if (o.text === true) { out(renderText(first.model, { project: project.name || path.basename(m) }).trimEnd()); return 0; }
+        const { folder, top, repos } = first;
+        if (o.text === true) { out(renderText(first.model, { project: first.project }).trimEnd()); return 0; }
         const summary = (x) => `${x.tickets.length} tickets, ${x.progress.ticketsDone.length} of ${x.progress.totalTickets} merged`;
         out(`dashboard: ${first.html}\ntable: ${first.csv}\n${summary(first.model)}${first.model.lines.some((e) => e.source === 'import') ? '' : ' (forge timeline import adds the history before 0.2.6)'}`);
         if (o['no-open'] !== true && process.platform === 'darwin') spawnSync('open', [first.html], { stdio: 'ignore' });
@@ -848,7 +870,7 @@ async function run(argv, env, cwd, out, failed) {
         // --watch (decisions 126 and 150): a look every 30 seconds until Ctrl+C, a new page when anything it reads changed
         // (and at least every 5 minutes), the tracker read at most every 5 minutes; the open page reloads itself.
         out(`watching: a look every ${everyText(every)}, a new page when something changed (the tracker read every 5 min); the open page reloads itself. Ctrl+C stops.`);
-        const sources = { repos: [m, top.out, ...(repos ?? []).map((r) => r.dir)], stateDirs: [path.join(m, '.forge', 'state'), ...(repos ?? []).map((r) => r.stateDir)], folders: [folder], skip: [first.html, first.csv, first.stamp] };
+        const sources = { repos: [m, top, ...(repos ?? []).map((r) => r.dir)], stateDirs: [path.join(m, '.forge', 'state'), ...(repos ?? []).map((r) => r.stateDir)], folders: [folder], skip: [first.html, first.csv, first.stamp] };
         let seen = inputsSignature(sources);
         let builtAt = Date.now();
         let readAt = Date.now();
@@ -860,11 +882,13 @@ async function run(argv, env, cwd, out, failed) {
             try {
               const now = Date.now();
               const tracker = now - readAt >= TRACKER;
-              if (tracker || now - builtAt >= TRACKER || inputsSignature(sources) !== seen) {
+              // What it reads, taken before the build: a change that lands while it builds shows in the next round.
+              const sig = inputsSignature(sources);
+              if (tracker || now - builtAt >= TRACKER || sig !== seen) {
                 const x = await build({ tracker });
                 if (tracker) readAt = now;
                 builtAt = now;
-                seen = inputsSignature(sources);
+                seen = sig;
                 out(`${clock(now)} rebuilt: ${summary(x.model)}`);
               }
             } catch (e) { out(`${clock(Date.now())} not rebuilt (${e.message}); trying again in ${everyText(every)}`); }
@@ -912,6 +936,21 @@ async function run(argv, env, cwd, out, failed) {
         if (linked) throw new UsageError(`Run forge import in the main checkout (${m}), not in a worktree.`);
         return await importProject(o, { main: m, env, out, init: (x) => init(x, env, m, out), teamRepo: () => teamRepo(env), machine: readJson(userConfigFile(env), {}) });
       }
+      case 'delete': {
+        let here = null;
+        if (git(cwd, ['rev-parse', '--show-toplevel']).ok) {
+          const { main: m, linked } = checkout(cwd);
+          if (linked) throw new UsageError(`Run forge delete in the main checkout (${m}), not in a worktree.`);
+          here = m;
+        }
+        // The team repo this checkout is linked to, else --team-repo, else this machine's.
+        const at = here && linkTarget(here);
+        const team = typeof o['team-repo'] === 'string' ? path.resolve(cwd, o['team-repo']) : at ? path.dirname(at) : teamRepo(env);
+        if (!git(team, ['rev-parse', '--show-toplevel']).ok) throw new UsageError(`The team repo ${team} is not a git repository.`);
+        const lines = [];
+        const settled = here && at ? { ok: worktrees({}, here, (l) => lines.push(l)) === 0, lines } : undefined;
+        return deleteProject(o, { main: here, team, settled, marks: { block: BLOCK, hook: OUR_HOOK, statusLine: OUR_STATUS_LINE }, out });
+      }
       case 'wait-owner': {
         const { main: m } = checkout(cwd);
         const { config } = loadConfig(m, env);
@@ -932,6 +971,11 @@ async function run(argv, env, cwd, out, failed) {
         const { project } = loadConfig(m, env);
         return timeline({ ticket: o._[0], days: o.days, json: o.json === true, csv: o.csv === true }, { stateDir: path.join(m, '.forge', 'state'), out, prices: project.prices });
       }
+      case 'ui': {
+        if (!process.stdin.isTTY || !process.stdout.isTTY) throw new UsageError('forge ui needs a terminal: run it in a terminal or a tmux pane (Claude Code\'s ! cannot run it).');
+        const { runUi } = await import('./ui/app.mjs');
+        return await runUi({ input: process.stdin, output: process.stdout, env, cwd, forge: fileURLToPath(import.meta.url), load: () => uiData(cwd, env) });
+      }
       case 'version': out(kitVersion()); return 0;
       default: {
         const lines = fs.readFileSync(new URL(import.meta.url), 'utf8').split('\n').slice(1);
@@ -940,7 +984,7 @@ async function run(argv, env, cwd, out, failed) {
       }
     }
   } catch (e) {
-    if (e instanceof UsageError || e instanceof ApiError || e instanceof DesignError || e instanceof MergeError || e instanceof DocsError || e instanceof StarterError || e instanceof MetricsError || e instanceof ShotError || e instanceof AppError || e instanceof LimitsError || e instanceof WaitError || e instanceof ApproveError || e instanceof MoveError || e instanceof LaneError || e instanceof LlmError) { process.stderr.write(`forge ${cmd}: ${e.message}\n`); failed(e.message); return 2; }
+    if (e instanceof UsageError || e instanceof ApiError || e instanceof DesignError || e instanceof MergeError || e instanceof DocsError || e instanceof StarterError || e instanceof MetricsError || e instanceof ShotError || e instanceof AppError || e instanceof LimitsError || e instanceof WaitError || e instanceof ApproveError || e instanceof MoveError || e instanceof DeleteError || e instanceof LaneError || e instanceof LlmError) { process.stderr.write(`forge ${cmd}: ${e.message}\n`); failed(e.message); return 2; }
     throw e;
   }
 }

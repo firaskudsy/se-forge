@@ -66,9 +66,10 @@ export const DEFAULTS = Object.freeze({
     doneStatuses: ['In Testing', 'Done', 'Closed', 'Resolved'],
   },
   budget: { warn: 100000, block: 120000, leadWarn: 100000, maxCallsWithoutEdit: 25, engineers: ENGINEERS },
-  // Per ticket, the circuit breaker (decision 127): past one of these the next engineer lane is refused and the
-  // ticket is parked until a person lifts it (forge limits lift <ticket>).
-  limits: { lanes: 4, blockerRounds: 2, qaFails: 2 },
+  // Per ticket, the circuit breaker (decisions 127 and 154): past one of these the next engineer lane is refused and
+  // the ticket is parked until a person lifts it (forge limits lift <ticket>). repeats: the engineer lanes after the
+  // first of each kind (a second API lane, a fix lane); a ticket's planned lanes, one per area, are not counted.
+  limits: { repeats: 3, blockerRounds: 2, qaFails: 2 },
   // In the build, how long a ticket waits for the owner's answer before it goes on hold and the lead takes another
   // (decision 147, forge wait-owner); 0 holds it at once.
   hold: { minutes: 10 },
@@ -245,10 +246,13 @@ export function loadConfig(mainRoot, env = process.env) {
       } catch (e) { errors.push(`repos/${member.repo}/project.json: cannot parse: ${e.message}`); }
     }
   }
+  // policy.limits.lanes counted every engineer lane before decision 154: the same allowance for a one-area ticket.
+  const old = raw?.policy?.limits;
+  if (isObj(old) && 'lanes' in old && !('repeats' in old)) { old.repeats = Number.isInteger(old.lanes) ? Math.max(1, old.lanes - 1) : old.lanes; delete old.lanes; }
   const config = merge(structuredClone(DEFAULTS), raw?.policy ?? {}, 'policy', errors);
   const project = merge(structuredClone(PROJECT_DEFAULTS), raw?.project ?? {}, 'project', errors);
   if (config.budget.warn >= config.budget.block) errors.push('policy.budget.warn must be below policy.budget.block');
-  for (const k of ['lanes', 'blockerRounds', 'qaFails']) if (!Number.isInteger(config.limits?.[k]) || config.limits[k] < 1) errors.push(`policy.limits.${k} must be a whole number, 1 or more`);
+  for (const k of ['repeats', 'blockerRounds', 'qaFails']) if (!Number.isInteger(config.limits?.[k]) || config.limits[k] < 1) errors.push(`policy.limits.${k} must be a whole number, 1 or more`);
   if (!Number.isInteger(config.hold?.minutes) || config.hold.minutes < 0 || config.hold.minutes > 120) errors.push('policy.hold.minutes must be a whole number from 0 to 120');
   if (!['auto', 'gitleaks', 'builtin'].includes(config.secrets.scanner)) errors.push('policy.secrets.scanner must be auto, gitleaks or builtin');
   if (!['github', 'gitlab'].includes(project.host)) errors.push('project.host must be github or gitlab');

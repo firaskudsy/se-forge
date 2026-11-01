@@ -38,7 +38,7 @@ Needs you (3):
 2. Which follow-ups join the build?
    [ ] #31 Rate limit on bookings (P2)
    [ ] #33 Export to CSV (P3, new scope)
-3. #12 reached its limit (4 engineer lanes). Give it one more?
+3. #12 reached its limit (3 repeat lanes). Give it one more?
    A. Yes: run `! forge limits lift 12` · B. No: it stays parked
 Reply like 1A 2[31] 3B, or in your own words.
 ```

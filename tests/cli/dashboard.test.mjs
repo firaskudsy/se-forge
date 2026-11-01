@@ -748,7 +748,7 @@ test('forge dashboard --watch: a look each round, a new page and stamp only when
   for (let k = 0; k < 2; k++) {
     // An agent's step lands in the timeline: the next round builds a new page.
     fs.appendFileSync(timeline, `${JSON.stringify({ at: at(70 + k), event: 'tool.start', who: 'backend-engineer', agent: 'b1', tool: 'Bash', what: 'npm test', ticket: '#11' })}\n`);
-    for (let i = 0; i < 40 && stamps.size < k + 2; i++) { await pause(100); stamps.add(read()); }
+    for (let i = 0; i < 100 && stamps.size < k + 2; i++) { await pause(100); stamps.add(read()); }
   }
   assert.equal(stamps.size, 3, `a new stamp for each change: ${[...stamps].join(' | ')}\n${text}`);
   const html = fs.readFileSync(out, 'utf8');

@@ -91,6 +91,12 @@ export function checkForgeMove(c, a0) {
   return [deny('move:person', `Only a person moves a project to another machine (decision 151). Tell the owner: after /pause and "Safe to close", they run forge ${c.argv[1]} in a terminal, or ! forge ${c.argv[1]} in this session.`)];
 }
 
+// forge delete (decision 152) is a person's: a project leaving the team repo is the owner's call.
+export function checkForgeDelete(c, a0) {
+  if (a0 !== 'forge' || c.argv[1] !== 'delete') return [];
+  return [deny('delete:person', 'Only a person deletes a project (decision 152). Tell the owner: they run forge delete <slug> in a terminal, or ! forge delete <slug> in this session.')];
+}
+
 // forge llm add, use and remove (decision 140) are a person's: which server the agents run on, and with whose key, is
 // the owner's choice. The list (forge llm) is anyone's; it names where keys are, never a key.
 export function checkForgeLlm(c, a0) {

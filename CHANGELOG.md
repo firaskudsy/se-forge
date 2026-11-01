@@ -8,6 +8,31 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ## [Unreleased]
 
+### Added
+- **`forge ui`** (decision 153): every command of `forge --help`, the project's tickets and what their agents do now,
+  on one terminal screen with two panels and the function keys, for a terminal or a tmux pane (and over ssh, where
+  the dashboard needs a tunnel). The left panel lists the tickets, what needs you first; the right one shows the
+  selected ticket: its steps, what waits for you and the command that answers it, its limits, its agents, its time
+  and tokens, and a live tail of the timeline. F2 opens every command in four groups with a form that shows the exact
+  command line; your decisions ask y/N first, and `forge delete` asks for the project's name. The menu is made from
+  the help, and a test fails when a command in the help has none. No new dependency.
+- **`forge delete <slug>`** (decision 152): a project's folder leaves the team repo in one pushed commit, and the
+  checkout it runs in is unlinked (the kit's files, settings entries, git hooks and exclude lines go; the developer's
+  own stay). Without `--confirm <slug>` it only says what would go and what stops it; it prints the line that brings
+  the project back. It never touches the app's repository or its tracker. The hook refuses it from Claude.
+
+### Changed
+- **The per-ticket lane limit counts repeat lanes only** (decision 154): `policy.limits.repeats` (default 3) replaces
+  `policy.limits.lanes` (4). A ticket's first lane of each kind (its planned DB, API and UI lanes) no longer counts;
+  a second lane of a kind (a fix lane, a lane continuing one cut off) does. A one-area ticket keeps its 3 retries, and
+  a full-stack ticket gets them too instead of one. A project's `lanes: n` reads as `repeats: n - 1`. `forge limits`
+  shows each ticket's lanes by kind.
+- `forge dashboard`'s model is built in one place for the page, `--text` and `forge ui`.
+
+### Fixed
+- **`forge dashboard --watch` could miss a change** that landed while it was building a page: it noted what it reads
+  after the build, so that change waited for the next one, or for the build every 5 minutes. It now notes it before.
+
 ## [0.2.48] - 2026-11-01
 
 ### Fixed

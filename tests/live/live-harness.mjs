@@ -17,7 +17,7 @@
 //              close: at start-up the lead moves merged tickets and reviewed no-branch work to Done; the hook checks each (decisions 118, 120)
 //              resume-upgrade: /resume after a kit upgrade, with a handover that carries the old kit's rules (decision 121)
 //              followup-round: with nothing left to pick, one round of P1/P2 follow-ups inside the register joins (decision 119)
-//              limit: a ticket at its limit (4 engineer lanes) is parked, not given a fifth (decision 127)
+//              limit: a ticket at its limit (3 repeat lanes) is parked, not given another (decisions 127, 154)
 //              screens: at its start the lead files the fix for a Playwright config that keeps no pictures (decision 125)
 //              release-close: after the promotion to main and the tag, the released tickets go to Done (decision 117)
 //              panel: the requirements panel (bootstrap stage 7) on a small project's drafts with five planted gaps (Sonnet agents, ~$2-6)
@@ -1164,21 +1164,21 @@ else if (a.includes('--output') || a.includes('-F')) console.log('[]');
     return cost;
   },
   limit() {
-    // Decision 127: #9 has used its 4 engineer lanes. The lead's next fix lane is refused; it parks #9 and tells the owner.
+    // Decisions 127 and 154: #9 has used its 3 repeat lanes. The lead's next fix lane is refused; it parks #9 and tells the owner.
     const { dir, env, forge } = sampleProject();
     const base = path.dirname(dir);
     const log = path.join(base, 'glab.log');
     fs.copyFileSync(path.join(FIXTURES, 'followups/glab.js'), path.join(base, 'bin', 'glab'));
     fs.chmodSync(path.join(base, 'bin', 'glab'), 0o755);
     fs.mkdirSync(path.join(dir, '.forge/state/spawns'), { recursive: true });
-    ['db-engineer', 'backend-engineer', 'backend-engineer', 'frontend-engineer'].forEach((type, i) => fs.writeFileSync(path.join(dir, `.forge/state/spawns/a${i}.json`), JSON.stringify({ type, ticket: '#9', description: `lane ${i + 1} #9`, at: new Date().toISOString() })));
+    ['db-engineer', 'backend-engineer', 'backend-engineer', 'backend-engineer', 'backend-engineer', 'frontend-engineer'].forEach((type, i) => fs.writeFileSync(path.join(dir, `.forge/state/spawns/a${i}.json`), JSON.stringify({ type, ticket: '#9', description: `lane ${i + 1} #9`, at: new Date().toISOString() })));
     fs.mkdirSync(path.join(dir, '.forge/project/reviews/9'), { recursive: true });
     fs.writeFileSync(path.join(dir, '.forge/project/reviews/9/code.md'), '# Code review (#9)\n\nVerdict: CHANGES REQUESTED\nCommit: abc1234\n\nBlocker: src/auth/login.ts:1 trims but does not lowercase the name.\n');
     forge('save', '-m', 'review of #9');
     const prompt = 'You are the lead running the pipeline. The review of ticket #9 found a blocker again (.forge/project/reviews/9/code.md). Do what step 4 of the pipeline skill (.claude/skills/pipeline/SKILL.md) says: spawn a backend-engineer fix lane for it, with the description "Fix lane #9". Reply in at most 5 lines.';
     const { calls, cost, said } = claude(dir, prompt, { allowed: ['Bash', 'Read', 'Skill', 'Agent'], env: { ...env, FAKE_LOG: log }, model: 'haiku', budget: 1 });
     const spawns = calls.filter((c) => ['Agent', 'Task'].includes(c.tool) && /engineer/.test(c.input?.subagent_type ?? '') && !/qa-engineer/.test(c.input?.subagent_type ?? ''));
-    check('limit', 'the fix lane is refused at the limit', spawns.length >= 1 && spawns.every((c) => c.error && /\[ticket:limit\] #9 has reached its limit: 4 engineer lanes/.test(c.text)), spawns.map((c) => `${c.input.subagent_type}: ${c.error ? c.text.slice(0, 120) : 'RAN'}`).join(' | ') || 'no engineer spawn');
+    check('limit', 'the fix lane is refused at the limit', spawns.length >= 1 && spawns.every((c) => c.error && /\[ticket:limit\] #9 has reached its limit: 3 repeat lanes/.test(c.text)), spawns.map((c) => `${c.input.subagent_type}: ${c.error ? c.text.slice(0, 120) : 'RAN'}`).join(' | ') || 'no engineer spawn');
     const blocked = readLog(log).filter((x) => x[0] === 'issue' && x[1] === 'update' && x[2] === '9' && x.some((v) => /status::Blocked/.test(v)));
     check('limit', '#9 parked: Blocked on the board', blocked.length === 1, JSON.stringify(readLog(log).filter((x) => x[0] === 'issue' && x[1] !== 'view' && x[1] !== 'list')));
     // No lift: nothing in limits.json (the lead may quote the command for the owner, in a comment or its reply).
