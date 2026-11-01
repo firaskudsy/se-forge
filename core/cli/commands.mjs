@@ -11,7 +11,7 @@ export const GROUPS = [['look', 'Look'], ['you', 'Your decisions'], ['setup', 'S
 export const COMMANDS = [
   { group: 'look', spec: 'forge dashboard --text', from: 'forge dashboard' },
   { group: 'look', spec: 'forge dashboard [--days <n>] [--ticket <list>] [--offline] [--no-open]', from: 'forge dashboard' },
-  { group: 'look', spec: 'forge dashboard --watch [--every <30s|2m>] [--no-open]', from: 'forge dashboard' },
+  { group: 'look', spec: 'forge dashboard --watch [--every <30s|2m>] [--no-open] [--no-alert]', from: 'forge dashboard' },
   { group: 'look', spec: 'forge limits', from: 'forge limits' },
   { group: 'look', spec: 'forge worktrees', from: 'forge worktrees' },
   { group: 'look', spec: 'forge timeline [<ticket>] [--days <n>]', from: 'forge timeline [' },

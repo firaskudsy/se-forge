@@ -12,6 +12,7 @@ import { paint, textOf } from './screen.mjs';
 import { COMMANDS, helpFor, helpEntries } from '../commands.mjs';
 import { fieldsOf, argvOf, lineOf } from './forms.mjs';
 import { itemsOf, headerOf, tail, projectLines, ticketLines, planOf } from './data.mjs';
+import { needsYou } from '../dashboard/needs.mjs';
 
 const REFRESH = 10000;
 const LIVE = 2000;
@@ -23,7 +24,8 @@ const strip = (s) => s.replace(/\x1b\[[\d;?]*[A-Za-z]/g, '').replace(/\r/g, '');
 export function runUi({ input, output, env, cwd, forge, load, color = !env.NO_COLOR, onFrame = null, signal = null, refreshMs = REFRESH, liveMs = LIVE }) {
   const help = helpEntries();
   const entries = COMMANDS.map((c) => ({ ...c, help: helpFor(c.from, help)?.text ?? '' }));
-  const st = { title: path.basename(cwd), items: [{ kind: 'project' }], sel: 0, top: 0, focus: 'left', right: { title: '', lines: [], scroll: 0 }, mode: 'details', overlay: null, status: STATUS, events: [], data: null, error: null, menuSel: 0 };
+  const st = { title: path.basename(cwd), items: [{ kind: 'project' }], sel: 0, top: 0, focus: 'left', right: { title: '', lines: [], scroll: 0 }, mode: 'details', overlay: null, status: STATUS, events: [], data: null, error: null, menuSel: 0, needs: [] };
+  const alerted = new Set();
   let child = null;
   let busy = false;
   let follow = true;
@@ -47,6 +49,19 @@ export function runUi({ input, output, env, cwd, forge, load, color = !env.NO_CO
   const soon = () => { pending ??= setTimeout(draw, 30); };
 
   const selected = () => st.items[st.sel];
+  // What needs you (decision 155): something new rings the terminal's bell and pops up, unless a dialog is open (then the
+  // header and the status line say it); the header counts them while any waits.
+  const needs = () => {
+    if (!st.data) { st.needs = []; return; }
+    st.needs = needsYou({ steps: st.data.model.steps, lines: st.events, now: Date.now() });
+    const fresh = st.needs.filter((n) => !alerted.has(n.key));
+    for (const k of [...alerted]) if (!st.needs.some((n) => n.key === k)) alerted.delete(k);
+    if (!fresh.length) return;
+    fresh.forEach((n) => alerted.add(n.key));
+    output.write('\x07');
+    if (!st.overlay) st.overlay = { kind: 'needs', items: st.needs, fresh: new Set(fresh.map((n) => n.key)) };
+    else { st.status = `Needs you: ${fresh.length} new · n shows it once this dialog is closed`; st.statusStyle = 'red'; }
+  };
   const details = () => {
     if (st.mode !== 'details' || !st.data) return;
     const it = selected();
@@ -67,6 +82,7 @@ export function runUi({ input, output, env, cwd, forge, load, color = !env.NO_CO
       const again = keep?.kind === 'ticket' ? st.items.findIndex((x) => x.kind === 'ticket' && x.t.num === keep.t.num) : 0;
       st.sel = Math.max(0, again);
       st.events = tail(data.stateDir);
+      needs();
       details();
     } catch (e) {
       st.data = null;
@@ -79,6 +95,7 @@ export function runUi({ input, output, env, cwd, forge, load, color = !env.NO_CO
   function live() {
     if (!st.data || busy) return;
     st.events = tail(st.data.stateDir);
+    needs();
     details();
     soon();
   }
@@ -169,6 +186,7 @@ export function runUi({ input, output, env, cwd, forge, load, color = !env.NO_CO
     const o = st.overlay;
     const page = Math.max(1, size().rows - 6);
     if (o?.kind === 'help') { if (['escape', 'enter', 'q', 'f1', 'h', '?'].includes(k)) st.overlay = null; return; }
+    if (o?.kind === 'needs') { if (['escape', 'enter', ' ', 'q'].includes(k)) { st.overlay = null; st.status = STATUS; st.statusStyle = ''; } return; }
     if (o?.kind === 'menu') {
       const order = menuRows(entries).filter((r) => r.entry !== undefined).map((r) => r.entry);
       const at = order.indexOf(o.sel);
@@ -240,6 +258,7 @@ export function runUi({ input, output, env, cwd, forge, load, color = !env.NO_CO
     }
     if (k === 'enter') { st.mode = 'details'; st.status = STATUS; st.statusStyle = ''; details(); if (size().cols < 80) st.focus = 'right'; return; }
     if (k === 'f1' || k === 'h' || k === '?') { st.overlay = { kind: 'help' }; return; }
+    if (k === 'n') { st.overlay = st.needs.length ? { kind: 'needs', items: st.needs, fresh: new Set() } : null; if (!st.needs.length) st.status = 'Nothing needs you now.'; return; }
     if (k === 'f2' || k === 'c') { st.overlay = { kind: 'menu', entries, sel: st.menuSel }; return; }
     if (k === 'f5' || k === 'r') { st.status = 'reading…'; refresh().then(() => { st.status = STATUS; soon(); }); return; }
     if (k === 'f3' || k === 'p') {

@@ -8,6 +8,7 @@ import { countsText } from './issues.mjs';
 import { stepsText } from './steps.mjs';
 import { finishText } from './finish.mjs';
 import { holdText } from './hold.mjs';
+import { needText } from './needs.mjs';
 import { duration } from '../timeline.mjs';
 import { fmt } from '../metrics.mjs';
 
@@ -73,6 +74,9 @@ export function renderText(m, { project }) {
   out.push(...stepsText(m.steps));
   // Every ticket that waits (decision 147): the page's On hold tab.
   if (holdText(m.hold ?? [])) out.push(holdText(m.hold));
+  // A prompt open in a session (decision 155): the work waits on a person right now.
+  const prompts = (m.needs ?? []).filter((n) => n.kind !== 'step');
+  if (prompts.length) out.push(`Open in a session now: ${prompts.map(needText).join('; ')}.`);
   out.push('');
 
   out.push(`Tickets merged: ${p.ticketsDone.length} of ${p.totalTickets} · stories done: ${p.totalStories ? `${p.storiesDone.length} of ${p.totalStories}` : 'no story list'}`);

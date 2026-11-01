@@ -270,7 +270,9 @@ then ten tabs:
 | On hold | every ticket that waits for you, with its questions and the reply to paste in the lead's session |
 | Tickets | every ticket, the unpicked ones too, with its status on the board, tokens, cost, agents, rounds and estimate; its number opens its issue, ▸ opens its agents one by one with their skills; in a system, a Repo column and filter |
 
-`--watch` keeps the open page current. After each merge the lead writes a progress report from the same numbers.
+`--watch` keeps the open page current, and when the work needs you (a permission prompt, a question, a ticket at its
+limit, a review to do) it sends a desktop notification with a sound and the page pops it up. After each merge the lead
+writes a progress report from the same numbers.
 Reference: [docs/metrics.md](docs/metrics.md); how to read it: GUIDE.md, part E.
 
 ## How a project is wired

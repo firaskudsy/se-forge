@@ -8,10 +8,10 @@ import { day } from '../dashboard/format.mjs';
 import { duration } from '../timeline.mjs';
 import { fmt } from '../metrics.mjs';
 import { kindsText } from '../limits.mjs';
+export { tail } from '../dashboard/needs.mjs';
 
 const ACTIVE = 5 * 60000;
 const HOLD = /\bblocked\b|\bwaiting for the owner\b|\bon hold\b/i;
-const TAIL = 256 * 1024;
 const pad = (n) => String(n).padStart(2, '0');
 export const hms = (t) => { const d = new Date(t); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
 const readJson = (file, fallback) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; } };
@@ -40,25 +40,6 @@ export function headerOf(m, project) {
   const step = !s ? '' : s.current === null ? `all ${s.steps.length} steps done` : `step ${s.current + 1} of ${s.steps.length}: ${s.steps[s.current].label}`;
   const kit = m.kit?.active ? `se-forge ${m.kit.active}${m.kit.llm ? ` on ${m.kit.llm.split(' ')[0]}` : ''}` : '';
   return [project, step, `${m.progress.ticketsDone.length} of ${m.progress.totalTickets} merged`, kit].filter(Boolean).join(' · ');
-}
-
-// The newest lines of the timeline, from the end of this month's file (and last month's, early in a month).
-export function tail(stateDir) {
-  let files = [];
-  try { files = fs.readdirSync(stateDir).filter((f) => /^timeline-\d{4}-\d\d\.jsonl$/.test(f)).sort().slice(-2); } catch { return []; }
-  const out = [];
-  for (const f of files) {
-    const file = path.join(stateDir, f);
-    const size = fs.statSync(file).size;
-    const fd = fs.openSync(file, 'r');
-    const buf = Buffer.alloc(Math.min(size, TAIL));
-    fs.readSync(fd, buf, 0, buf.length, size - buf.length);
-    fs.closeSync(fd);
-    const lines = buf.toString('utf8').split('\n');
-    if (buf.length < size) lines.shift();
-    for (const l of lines) { try { if (l) out.push(JSON.parse(l)); } catch { /* a line being written */ } }
-  }
-  return out.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0)).slice(-500);
 }
 
 const who = (e) => String(e.who || '').replace(/-engineer$/, '');

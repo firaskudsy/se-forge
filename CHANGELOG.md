@@ -8,6 +8,18 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ## [Unreleased]
 
+### Added
+- **What needs you pops up, with a sound** (decision 155). The dashboard page shows a popup listing everything that
+  waits for you (the stepper's "Waiting for you", and every prompt open in a session now: a permission prompt, a forge
+  rule's ask, a question with choices, the lead idle at its prompt) with a two-tone sound, and counts it in the tab's
+  title; "Got it" keeps it closed until something new comes. `forge dashboard --watch` looks every 5 seconds: a new
+  need rings the terminal's bell, sends a desktop notification with a sound (macOS Notification Center and its Glass
+  sound; `notify-send` on a Linux desktop) and builds the page at once; a reminder every 30 minutes; `--no-alert`
+  keeps only the popup. `forge ui` pops it up too, with the bell, counts it in its header, and `n` shows it again.
+  `forge dashboard --text` lists the open prompts.
+- The kit's hooks record Claude Code's `Notification` events (`owner.needed` in the timeline): a permission prompt,
+  the lead idle at its prompt, a form. `forge sync` (or `forge upgrade`) adds the hook to a project.
+
 ## [0.2.49] - 2026-11-01
 
 ### Added

@@ -268,7 +268,8 @@ export function postToolUseFailure(input, env) {
   return null;
 }
 
-// The events that only go into the timeline (prompts, compaction, session end, API errors, auto-mode denials).
+// The events that only go into the timeline (prompts, compaction, session end, API errors, auto-mode denials, Claude
+// Code's notifications).
 export function note(input, env) {
   noteEvent(makeContext(input, env));
   return null;

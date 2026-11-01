@@ -153,7 +153,8 @@ forge dashboard --days 14       the last 14 days
 forge dashboard --ticket 11,12  some tickets
 forge dashboard --out ~/Desktop/acme.html --no-open
 forge dashboard --text          the same numbers as text, nothing written (the lead's progress report)
-forge dashboard --watch         a look every 30 seconds (--every 30s|2m), a new page when something changed; the open page reloads itself
+forge dashboard --watch         a look every 30 seconds (--every 30s|2m), a new page when something changed; the open page reloads itself;
+                                what needs you: a desktop notification with a sound, a bell, and a popup on the page (--no-alert: the popup only)
 ```
 One page on this Mac (`.forge/state/dashboard.html`, never committed), with `dashboard.csv` next to it. It
 joins the timeline with the bootstrap's stories and tickets, the plans, `metrics.md`, the review rounds in the
@@ -169,6 +170,20 @@ it (`dashboard.stamp.js`, the build's time). It reads the tracker at most every 
 every 5 minutes so its times stay current. The open page loads the stamp every 5 seconds and reloads itself when it
 is newer, keeping its tab, its open sections and where it was scrolled to. Ctrl+C removes the stamp, and the open
 page says it is no longer watched.
+
+**What needs you** (decision 155) pops up over the page with a sound: the stepper's "Waiting for you" items, then
+every prompt still open in a session, read from the timeline: a forge rule's ask (`tool.ask`), a question with choices
+(`AskUserQuestion`) and Claude Code's own notifications, which the kit's `Notification` hook records as
+`owner.needed` (`permission_prompt` after about six seconds, `idle_prompt` a minute after the lead finished,
+`elicitation_dialog`, `agent_needs_input`). A prompt counts as open while nothing follows it from whoever waits on it
+(a notification names no agent: it is the one agent with a call open in that session, else the lead), until its
+session ends or another one starts; the lead idle at its prompt does not count while its agents are at work (they will
+wake it). A forge ask waits six seconds before it counts, as Claude Code's notifications do. "Got it" keeps the popup
+closed in that browser until a new one comes (`localStorage`); the tab's title counts what waits. `forge dashboard
+--watch` looks every 5 seconds at the timeline's end: a new need rings the terminal's bell, sends a desktop
+notification with a sound (`osascript` and `afplay` on macOS, `notify-send` on a Linux desktop; `--no-alert`: none)
+and builds the page at once; a reminder every 30 minutes while any waits. `forge dashboard --text` lists the open
+prompts as "Open in a session now".
 
 **Working time**, a KPI next to "Waiting for you", is the AI at work over the whole project: agents, gates and the
 lead's turns, each moment once (chart 1's top lane, added up). It leaves out the waits for you and every stretch of

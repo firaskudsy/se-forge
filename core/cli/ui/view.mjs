@@ -4,6 +4,8 @@
 import { frame, put, box, fit, width } from './screen.mjs';
 import { GROUPS } from '../commands.mjs';
 import { titleOf } from './data.mjs';
+import { needText } from '../dashboard/needs.mjs';
+import { clock } from '../dashboard/format.mjs';
 
 export const KEYS = [['1', 'Help'], ['2', 'Commands'], ['3', 'Plan'], ['4', 'Handover'], ['5', 'Refresh'], ['6', 'Approve'], ['7', 'Lift'], ['8', 'Export'], ['9', 'Dashboard'], ['10', 'Quit']];
 export const NARROW = 80;
@@ -123,11 +125,25 @@ const HELP = [
   '  F6  a            forge approve <ticket>           F7  l   forge limits lift <ticket>',
   '  F8  e            forge export --check             F9  d   forge dashboard (the page)',
   '  Esc              stop a running command, close a dialog, back to the ticket',
+  '  n                what needs you now (it pops up by itself, with the terminal\'s bell, when something new does)',
   '  F10 q            quit',
   '',
   'Each command runs as forge itself would in this folder: forge ui adds no rights and takes none away. Your decisions',
   '(approve, lift, export, delete) ask before they run. Over ssh, F9 writes the page and prints where it is.',
 ];
+
+// What needs you now (decision 155), the new ones first marked.
+function needsBox(f, st, cols, rows) {
+  const o = st.overlay;
+  const w = Math.min(cols - 4, 110);
+  const lines = o.items.flatMap((n) => wrap(`${o.fresh.has(n.key) ? 'new · ' : ''}${needText(n)}${n.since ? ` · since ${clock(n.since)}` : ''}`, w - 8).map((l, i) => [[`${i ? '   ' : ' • '}${l}`, o.fresh.has(n.key) ? 'bold' : '']]));
+  const h = Math.min(rows - 2, lines.length + 4);
+  const x = Math.floor((cols - w) / 2);
+  const y = Math.max(1, Math.floor((rows - h) / 2));
+  box(f, y, x, h, w, `Needs you now (${o.items.length})`, 'red');
+  lines.slice(0, h - 3).forEach((l, i) => put(f, y + 1 + i, x + 2, l, w - 4));
+  put(f, y + h - 2, x + 2, [['Enter or Esc: got it · n shows this again', 'grey']], w - 4);
+}
 
 function help(f, cols, rows) {
   const w = Math.min(cols - 4, 116);
@@ -141,7 +157,8 @@ function help(f, cols, rows) {
 
 export function render(st, { cols, rows }) {
   const f = frame(cols, rows);
-  put(f, 0, 0, [[` forge ui · ${st.title || ''}`, 'inv bold'], [st.clock ? `  ${st.clock} ` : '', 'inv']], cols, 'inv');
+  const badge = st.needs?.length ? [[` ! needs you (${st.needs.length}) `, 'inv red bold']] : [];
+  put(f, 0, 0, [[` forge ui · ${st.title || ''} `, 'inv bold'], ...badge, [st.clock ? `  ${st.clock} ` : '', 'inv']], cols, 'inv');
   const h = rows - 3;
   const narrow = cols < NARROW;
   const lw = narrow ? cols : Math.max(30, Math.floor(cols * 0.4));
@@ -171,5 +188,6 @@ export function render(st, { cols, rows }) {
   if (st.overlay?.kind === 'form') form(f, st, cols, rows);
   if (st.overlay?.kind === 'confirm') confirm(f, st, cols, rows);
   if (st.overlay?.kind === 'help') help(f, cols, rows);
+  if (st.overlay?.kind === 'needs') needsBox(f, st, cols, rows);
   return f;
 }

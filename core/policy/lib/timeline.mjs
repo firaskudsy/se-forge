@@ -293,6 +293,9 @@ export function noteEvent(ctx) {
     case 'PreCompact': return record(ctx, 'compact.start', { trigger: input.trigger });
     case 'PostCompact': return record(ctx, 'compact.end', { trigger: input.trigger });
     case 'StopFailure': return record(ctx, 'turn.fail', { why: clip([input.error, input.error_details].filter(Boolean).join(': ')) });
+    // Claude Code needs the person (decision 155): a permission prompt, the lead idle at its prompt, a form; the
+    // dashboard, forge dashboard --watch and forge ui tell them while nothing in that session follows it.
+    case 'Notification': return record(ctx, 'owner.needed', { kind: input.notification_type, what: clip(input.message, WHAT), title: clip(input.title) });
     case 'PermissionDenied': return record(ctx, 'tool.refused', { id: input.tool_use_id, tool: input.tool_name, what: clip(describe(input, ctx), WHAT), rule: 'permission', why: clip(input.reason) });
     default: return undefined;
   }

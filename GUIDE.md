@@ -398,6 +398,7 @@ How a run behaves, so nothing surprises you:
 | See what the agents left behind | `forge worktrees` (running, done or unfinished; `--clean` removes the done ones) |
 | See where a ticket's time and tokens went | `forge timeline 12`: waits for you, agents, gates, refusals, failures, tokens by model and by who, and the cost once prices are set; `--csv` for a spreadsheet (`docs/metrics.md`) |
 | See the whole project in charts | `forge dashboard` (part E) |
+| Know the moment the work needs you | `forge dashboard --watch` in a terminal: a desktop notification with a sound, and a popup on the open page, for each new thing that waits for you (part E); `forge ui` pops it up too, with the terminal's bell (part J) |
 | Keep a picture of the app at this moment | `forge shot ~/Desktop/screen.png "S1: the vote is saved"` (part E) |
 | Add a request from the client | create an issue in the app's GitLab project; the project manager agent triages it |
 | Ship what is on `dev` | ask Claude to prepare a release (skill `release`), then merge `dev` → `staging` → `main` in GitLab and tag it; any released ticket still open closes |
@@ -447,7 +448,21 @@ It builds one page on your Mac and opens it in the browser, with a CSV next to i
 browser refresh shows the same one, and `forge dashboard` again makes a new one. **`--watch`** keeps it current:
 it looks every 30 seconds (`--every 10s`, `--every 2m`) until you press Ctrl+C, makes a new page when anything
 changed (and reads GitLab every 5 minutes), and the open page reloads itself after each, on the same tab and at the
-same place. It combines the timeline with
+same place.
+
+**When the work needs you** (decision 155), the page says so in a popup with a sound: a ticket at its limit or on
+hold, a review or a merge that waits for you (the stepper's "Waiting for you"), and every prompt open in a session
+right now: a permission prompt (Claude Code's or a forge rule's), a question with choices, or the lead idle at its
+prompt for a minute after it finished. The tab's title counts them (`(2) needs you`). **Got it** closes the popup
+until something new needs you; **Sound** turns the sound off or on for this browser. A browser holds a page's sound
+until you have clicked on it once: the popup says so, and the first click plays it. With `--watch`, forge also looks
+every 5 seconds: something new rings the terminal's bell, sends a **desktop notification with a sound** (macOS's
+Notification Center and its Glass sound; on Linux, `notify-send` where a desktop runs) and builds the page at once, so
+the open page pops it up. While anything waits, a reminder comes every 30 minutes. `--no-alert` keeps only the page's
+popup. On a Mac, the first notification may need allowing: System Settings > Notifications > Script Editor. Over ssh
+(part I), the bell reaches your terminal and the page through the tunnel pops up and plays the sound on your computer.
+
+It combines the timeline with
 the project's stories, tickets, plans and estimates, review rounds and merges, and reads the issues' history from
 GitLab for chart 3 (`--offline` skips that and uses the last read; the first read of a project takes a few seconds
 per ten issues, later ones only fetch what changed). The page itself needs no internet. Beside the title, two links
@@ -835,6 +850,7 @@ whole project: the same numbers as `forge dashboard --text`.
 | F6 `a`, F7 `l` | `forge approve <ticket>`, `forge limits lift <ticket>`, with the selected ticket filled in |
 | F8 `e`, F9 `d` | `forge export --check`; `forge dashboard` (over ssh it writes the page and says where) |
 | Esc | Stop a running command, close a dialog, back to the ticket |
+| `n` | What needs you now. It also pops up by itself, with the terminal's bell, when something new needs you, and the header counts what waits (`! needs you (2)`); Enter or Esc closes it until something new comes (decision 155) |
 | F1 `h`, F10 `q` | Help; quit |
 
 A command runs as `forge` itself would in that folder, and its output comes on the right: `forge ui` adds no rights

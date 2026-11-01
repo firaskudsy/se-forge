@@ -14,6 +14,7 @@ import { projectSteps, stepTimes } from './steps.mjs';
 import { renderSteps } from './steps-view.mjs';
 import { finish, finishText } from './finish.mjs';
 import { onHold, renderHold } from './hold.mjs';
+import { needsYou, needText } from './needs.mjs';
 import { everyText } from './watch.mjs';
 import { ticketUsage, ticketLimits, reached, teamPaths } from '../../policy/lib/limits.mjs';
 import { day, weekday, clock, when } from './format.mjs';
@@ -92,7 +93,7 @@ export function dashboardModel({ main, folder, teamRoot, base, stateDir, prices 
   const timeline = projectTimeline(lines, { merges, shots: marks });
   // When the app could be done (decision 145), at the pace of the whole project, whatever --days or --ticket say.
   const end = finish({ steps, all, drafts: data.drafts, catalogue: data.catalogue, forecast: prog.forecast, timeline: days || only ? projectTimeline(everyLine) : timeline, now });
-  return { data, all, tickets: picked, every, table, only, kit, issues: tracked, app, architecture, watch, link, repoLinks: repoLinks({ main, folder, repos, origin }), lines, money, prices, now, since, shots, progress: prog, steps, finish: end, stepTimes: stepTimes({ steps, folder, main, base, lines: everyLine, now }), hold: onHold({ every, drafts: data.drafts, catalogue: data.catalogue }), roles: roles(lines, prices), friction: friction(lines), timeline, skills };
+  return { data, all, tickets: picked, every, table, only, kit, issues: tracked, app, architecture, watch, link, repoLinks: repoLinks({ main, folder, repos, origin }), lines, money, prices, now, since, shots, progress: prog, steps, finish: end, stepTimes: stepTimes({ steps, folder, main, base, lines: everyLine, now }), hold: onHold({ every, drafts: data.drafts, catalogue: data.catalogue }), needs: needsYou({ steps, lines: everyLine, now }), roles: roles(lines, prices), friction: friction(lines), timeline, skills };
 }
 
 // The project's repositories on their host, for the links beside the page's title: the client repo (a system's
@@ -423,7 +424,8 @@ footer{color:var(--dim);font-size:12px}footer p{margin:4px 0}
 .verb{display:inline-block;min-width:52px;text-align:center;border-radius:4px;padding:1px 6px;font:600 11px ui-monospace,Menlo,monospace;color:#fff;background:var(--dim)}.v-get{background:var(--i-open)}.v-post{background:var(--i-closed)}.v-put,.v-patch{background:var(--i-progress)}.v-delete{background:var(--rework)}
 .hold{border-top:1px solid var(--line);padding:12px 0 6px;scroll-margin-top:56px}.hold h3{font-size:15px;margin:0 0 2px}.hold h3 a{color:var(--agents)}.hold .dim{margin:2px 0}.hold-s{margin:6px 0;color:var(--waiting)}.hold-r{margin:10px 0 2px;font-weight:600}.hold .md{max-width:920px}
 .status{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:999px;padding:4px 12px;margin:0 0 10px;font-weight:600}.status i{width:9px;height:9px;border-radius:50%;background:var(--idle)}.status.up i{background:var(--i-closed)}.status.down i{background:var(--dim)}
-</style></head><body><main>
+.needs{max-width:min(640px,calc(100vw - 32px));border:2px solid var(--waiting);border-radius:12px;background:var(--card);color:var(--fg);padding:18px 20px}.needs::backdrop{background:rgba(0,0,0,.45)}.needs h2{color:var(--waiting);margin:0 0 8px}.needs ul{margin:0 0 12px;padding-left:20px}.needs li{margin:6px 0}.needs li.new{font-weight:600}.needs li.new::after{content:" new";color:var(--waiting);font-size:11px;font-weight:600;text-transform:uppercase}.needs .dim{font-weight:400}.needs .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.needs button{font:inherit;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg);padding:6px 12px;cursor:pointer}.needs button.go{background:var(--waiting);border-color:var(--waiting);color:#fff}.needs .muted{color:var(--dim);font-size:12px;margin:10px 0 0}
+</style></head><body>${needsPopup(m.needs)}<main>
 <header class="top"><div><h1>${esc(project)}</h1><p class="sub">${m.since > 0 ? `Last ${Math.round((m.now - m.since) / (24 * H))} days` : 'Whole project'} · built ${esc(when(m.now))} · ${m.table.length} tickets${kitText(m.kit) ? ` · ${esc(kitText(m.kit))}` : ''}${m.watch ? ` · <span id="watch">watching: a look every ${everyText(m.watch.every)}, and this page reloads itself when something changed</span>` : ''}</p></div>${repoNav(m.repoLinks)}</header>
 <div class="kpis">${kpis.map(([k, v, more, hint]) => `<div class="kpi"${hint && more ? ` title="${esc(hint)}"` : ''}><span>${esc(k)}</span><b>${esc(v)}</b>${more ? `<small>${esc(more)}</small>` : ''}</div>`).join('')}</div>
 ${renderSteps(m.steps)}
@@ -552,7 +554,54 @@ document.querySelectorAll('.tickets > thead th').forEach(function (th) {
     rows.forEach(function (p) { body.appendChild(p.r); if (p.d) body.appendChild(p.d); });
   });
 });
-</script>${m.watch ? watchScript(m) : ''}</body></html>`;
+</script>${m.watch ? watchScript(m) : ''}${needsScript(m.needs)}</body></html>`;
+}
+
+// What needs you now (decision 155) as a popup over the page, with a sound: shown when the page has a need this browser
+// has not seen yet (a page that reloads itself under --watch keeps the ones you closed with "Got it"); the tab's title
+// counts them while any is open. A browser that blocks sound until a click on the page plays it at the first click.
+function needsPopup(needs = []) {
+  if (!needs.length) return '';
+  const items = needs.map((n) => `<li data-key="${esc(n.key)}">${esc(needText(n))}${n.since ? ` <span class="dim">· since ${esc(clock(n.since))}</span>` : ''}</li>`).join('');
+  return `<dialog id="needs" class="needs" aria-labelledby="needs-title"><h2 id="needs-title">Needs you now (${needs.length})</h2><ul>${items}</ul><div class="row"><button type="button" class="go" id="needs-ok">Got it</button><button type="button" id="needs-sound"></button></div><p class="muted" id="needs-note">This comes back when something new needs you.</p></dialog>`;
+}
+function needsScript(needs = []) {
+  if (!needs.length) return '';
+  return `<script>
+(function () {
+  var KEYS = ${JSON.stringify(needs.map((n) => n.key)).replace(/</g, '\\u003c')}, SEEN = 'forge-needs-' + location.pathname, SOUND = 'forge-needs-sound';
+  var get = function (k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } };
+  var set = function (k, v) { try { localStorage.setItem(k, v); } catch (e) { /* no storage: it asks again next time */ } };
+  document.title = '(' + KEYS.length + ') needs you · ' + document.title;
+  var seen = []; try { seen = JSON.parse(get(SEEN, '[]')); } catch (e) { seen = []; }
+  var fresh = KEYS.filter(function (k) { return seen.indexOf(k) < 0; });
+  var d = document.getElementById('needs');
+  if (!d || !fresh.length) return;
+  Array.prototype.forEach.call(d.querySelectorAll('li'), function (li) { if (fresh.indexOf(li.dataset.key) >= 0) li.className = 'new'; });
+  var on = get(SOUND, 'on') !== 'off', btn = document.getElementById('needs-sound'), note = document.getElementById('needs-note');
+  function label() { btn.textContent = on ? 'Sound: on' : 'Sound: off'; }
+  function beep() {
+    if (!on) return;
+    try {
+      var C = window.AudioContext || window.webkitAudioContext, ctx = new C();
+      var tone = function (f, at) { var o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = f; o.connect(g); g.connect(ctx.destination); g.gain.setValueAtTime(0.0001, ctx.currentTime + at); g.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + at + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + at + 0.25); o.start(ctx.currentTime + at); o.stop(ctx.currentTime + at + 0.3); };
+      var play = function () { tone(880, 0); tone(1320, 0.28); };
+      if (ctx.state === 'running') return play();
+      ctx.resume().then(play, function () {});
+      setTimeout(function () {
+        if (ctx.state === 'running') return;
+        note.textContent = 'Your browser holds the sound until you click this page: click anywhere to hear it.';
+        document.addEventListener('click', function once() { document.removeEventListener('click', once); ctx.resume().then(play, function () {}); });
+      }, 400);
+    } catch (e) { /* no sound here: the popup still shows */ }
+  }
+  label();
+  btn.onclick = function () { on = !on; set(SOUND, on ? 'on' : 'off'); label(); if (on) beep(); };
+  document.getElementById('needs-ok').onclick = function () { set(SEEN, JSON.stringify(KEYS)); d.close(); };
+  try { d.showModal(); } catch (e) { d.setAttribute('open', ''); }
+  beep();
+})();
+</script>`;
 }
 
 // The stamp forge dashboard --watch writes next to the page after each build: the build's time. The page loads it

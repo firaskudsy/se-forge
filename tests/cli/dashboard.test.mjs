@@ -730,7 +730,7 @@ test('forge dashboard --watch: a look each round, a new page and stamp only when
   const stamp = path.join(w.base, 'out', 'dash.stamp.js');
   const timeline = path.join(w.state, 'timeline-2026-10.jsonl');
   const { spawn } = await import('node:child_process');
-  const p = spawn('node', [FORGE, 'dashboard', '--watch', '--offline', '--no-open', '--out', out], { cwd: w.client, env: { ...process.env, CLAUDECODE: '', FORGE_WATCH_MS: '300' } });
+  const p = spawn('node', [FORGE, 'dashboard', '--watch', '--offline', '--no-open', '--out', out], { cwd: w.client, env: { ...process.env, CLAUDECODE: '', FORGE_WATCH_MS: '300', FORGE_ALERT_FILE: path.join(w.base, 'alerts.jsonl') } });
   let text = '';
   p.stdout.on('data', (d) => { text += d; });
   p.stderr.on('data', (d) => { text += d; });

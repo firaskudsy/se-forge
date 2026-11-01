@@ -23,9 +23,11 @@
 //   forge timeline [<ticket>] [--days <n>] [--json | --csv]   where the time went: waits for you, agents, gates,
 //                                         refusals and failures, from the hooks' log (.forge/state/timeline-*.jsonl)
 //   forge timeline import                 the history before the hooks' log, from Claude Code's session logs
-//   forge dashboard [--days <n>] [--ticket 11,12] [--out <file>] [--no-open] [--offline] [--watch [--every <30s|2m>]]   charts in tabs and a ticket table
-//                                         in one local page (.forge/state/dashboard.html), with a CSV next to it;
-//                                         --text prints its numbers instead and writes nothing (the lead's report)
+//   forge dashboard [--days <n>] [--ticket 11,12] [--out <file>] [--no-open] [--offline] [--watch [--every <30s|2m>] [--no-alert]]
+//                                         charts in tabs and a ticket table in one local page (.forge/state/dashboard.html),
+//                                         with a CSV next to it; what needs you pops up on it, and --watch also sends a
+//                                         desktop alert with a sound (decision 155); --text prints its numbers instead
+//                                         and writes nothing (the lead's report)
 //   forge shot <image> "<what>" [--ticket <n>]   keep a picture of the app for the dashboard (team repo, shots/)
 //   forge shot --playwright <report.json> [--ticket <n>]   the last screen of each passed test in a Playwright report
 //   forge shot --dir <folder> [--ticket <n>]   each picture in a folder with its record (Flutter: build/forge-shots)
@@ -88,6 +90,8 @@ import { renderText } from './dashboard/text.mjs';
 import { readIssues } from './dashboard/issues.mjs';
 import { architectureModel } from './dashboard/architecture.mjs';
 import { parseEvery, everyText, inputsSignature, TRACKER } from './dashboard/watch.mjs';
+import { needsYou, needText, tail } from './dashboard/needs.mjs';
+import { desktopAlert } from './dashboard/alert.mjs';
 import { shot, ShotError, screensCheck } from './shot.mjs';
 import { app, appInfo, AppError } from './app.mjs';
 import { checkSystem, memberOf, memberSettings, systemOf } from '../policy/lib/system.mjs';
@@ -848,7 +852,7 @@ async function run(argv, env, cwd, out, failed) {
       }
       case 'dashboard': {
         const { main: m } = checkout(cwd);
-        const usage = 'forge dashboard [--text] [--days <n>] [--ticket 11,12] [--out <file>] [--no-open] [--offline] [--watch [--every <30s|2m>]]';
+        const usage = 'forge dashboard [--text] [--days <n>] [--ticket 11,12] [--out <file>] [--no-open] [--offline] [--watch [--every <30s|2m>] [--no-alert]]';
         if (o.days !== undefined && !(Number(o.days) > 0)) throw new UsageError(usage);
         const watch = o.watch === true;
         const every = parseEvery(o.every);
@@ -870,22 +874,27 @@ async function run(argv, env, cwd, out, failed) {
         // --watch (decisions 126 and 150): a look every 30 seconds until Ctrl+C, a new page when anything it reads changed
         // (and at least every 5 minutes), the tracker read at most every 5 minutes; the open page reloads itself.
         out(`watching: a look every ${everyText(every)}, a new page when something changed (the tracker read every 5 min); the open page reloads itself. Ctrl+C stops.`);
+        const alerts = o['no-alert'] !== true;
+        out(`alerts: what needs you is looked at every 5 seconds; something new pops up on the page${alerts ? ', with a desktop notification and a sound (--no-alert: none)' : ''}.`);
         const sources = { repos: [m, top, ...(repos ?? []).map((r) => r.dir)], stateDirs: [path.join(m, '.forge', 'state'), ...(repos ?? []).map((r) => r.stateDir)], folders: [folder], skip: [first.html, first.csv, first.stamp] };
         let seen = inputsSignature(sources);
         let builtAt = Date.now();
         let readAt = Date.now();
+        let model = first.model;
         return await new Promise((resolve) => {
           let busy = false;
-          const timer = setInterval(async () => {
-            if (busy) return;
+          let again = false;
+          const round = async (force = false) => {
+            if (busy) { again ||= force; return; }
             busy = true;
             try {
               const now = Date.now();
               const tracker = now - readAt >= TRACKER;
               // What it reads, taken before the build: a change that lands while it builds shows in the next round.
               const sig = inputsSignature(sources);
-              if (tracker || now - builtAt >= TRACKER || sig !== seen) {
+              if (force || tracker || now - builtAt >= TRACKER || sig !== seen) {
                 const x = await build({ tracker });
+                model = x.model;
                 if (tracker) readAt = now;
                 builtAt = now;
                 seen = sig;
@@ -893,9 +902,39 @@ async function run(argv, env, cwd, out, failed) {
               }
             } catch (e) { out(`${clock(Date.now())} not rebuilt (${e.message}); trying again in ${everyText(every)}`); }
             busy = false;
-          }, Number(env.FORGE_WATCH_MS) || every);
+            if (again) { again = false; round(true); }
+          };
+          const timer = setInterval(() => round(), Number(env.FORGE_WATCH_MS) || every);
+          // What needs you (decision 155), from the timeline's end and the last page's steps: something new rings here and
+          // on the desktop, and builds a page at once, which pops it up; a reminder every 30 minutes while any waits.
+          const stateDir = path.join(m, '.forge', 'state');
+          const alerted = new Set();
+          // What the page shows, from its build: a need that came after it (even while the watch starts) builds a new one.
+          let shown = (model.needs ?? []).map((n) => n.key).join('\n');
+          let remindAt = 0;
+          const check = () => {
+            const now = Date.now();
+            let items;
+            try { items = needsYou({ steps: model.steps, lines: tail(stateDir, { bytes: 2 * 1024 * 1024, max: Infinity }), now }); } catch { return; }
+            const fresh = items.filter((n) => !alerted.has(n.key));
+            for (const k of [...alerted]) if (!items.some((n) => n.key === k)) alerted.delete(k);
+            fresh.forEach((n) => alerted.add(n.key));
+            if (fresh.length || (items.length && now >= remindAt)) {
+              const list = fresh.length ? fresh : items;
+              const more = list.length > 1 ? ` (and ${list.length - 1} more)` : '';
+              out(`${alerts ? '\x07' : ''}${clock(now)} ${fresh.length ? 'needs you' : 'still needs you'}: ${list.map(needText).join('; ')}`);
+              if (alerts) desktopAlert(`${first.project} needs you${items.length > 1 ? ` (${items.length})` : ''}`, `${fresh.length ? '' : 'Still waiting: '}${needText(list[0])}${more}`, env);
+              remindAt = now + 30 * 60000;
+            }
+            const keys = items.map((n) => n.key).join('\n');
+            if (keys !== shown) round(true);
+            shown = keys;
+          };
+          const alarm = setInterval(check, Number(env.FORGE_ALERT_MS) || 5000);
+          check();
           const stop = () => {
             clearInterval(timer);
+            clearInterval(alarm);
             fs.rmSync(stampFile(file), { force: true });
             out('stopped watching; the page stays as it was last built');
             resolve(0);
