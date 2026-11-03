@@ -916,4 +916,4 @@ unlinks it. Run outside any checkout, `forge delete` uses this machine's team re
   the project's `project.json`, then `forge save`.
 - **The app doesn't start:** is Docker Desktop running? Then see the skill `dev-environment`, "When it misbehaves".
 - **CI is red:** ask Claude to debug the pipeline (skill `pipeline-debug`).
-- **More detail:** `docs/cheat-sheet.md` (one page), `README.md` (everything).
+- **More detail:** `README.md` (everything).

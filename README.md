@@ -227,7 +227,7 @@ In Claude Code:
 | `/review`, `/qa`, `/figma-check`, `/next-ticket` | One step on its own |
 | `/pause`, `/resume` | Stop safely before closing the laptop; carry on later, also after a kit upgrade |
 
-In a terminal (`forge help` for every option; one page for the team: [docs/cheat-sheet.md](docs/cheat-sheet.md)):
+In a terminal (`forge help` for every option):
 
 | Command | What it does |
 |---|---|
@@ -340,7 +340,7 @@ core/                 the kit, tool-neutral
   ci/  server/        CI jobs, and server setup checklists for GitHub and GitLab
 adapters/claude/      Claude Code wiring: roles -> agents, commands, the local settings template
 extras/pacing/        the optional status line that records plan usage
-docs/                 the cheat sheet, the metrics reference, every decision, the system mode plan
+docs/                 the metrics reference, every decision, the system mode plan
 tests/                unit and integration tests; tests/stacks, tests/ci and tests/starter run real containers;
                       tests/live runs real Claude Code sessions
 ```

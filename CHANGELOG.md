@@ -8,6 +8,9 @@ A project pins an exact version in its `project.json`; `forge upgrade --to <vers
 
 ## [Unreleased]
 
+### Removed
+- `docs/cheat-sheet.md`. README.md and GUIDE.md no longer link to it.
+
 ## [0.2.50] - 2026-11-01
 
 ### Added
